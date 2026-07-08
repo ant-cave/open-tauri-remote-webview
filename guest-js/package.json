@@ -1,0 +1,28 @@
+{
+  "name": "open-tauri-remote-ui",
+  "version": "0.14.0",
+  "private": true,
+  "description": "Remote browser UI access for Tauri v2 apps",
+  "type": "module",
+  "main": "./dist-js/api/index.js",
+  "types": "./dist-js/api/index.d.ts",
+  "exports": {
+    "./api/core": {
+      "types": "./dist-js/api/core.d.ts",
+      "import": "./dist-js/api/core.js"
+    },
+    "./api/event": {
+      "types": "./dist-js/api/event.d.ts",
+      "import": "./dist-js/api/event.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "files": ["dist-js"],
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "license": "MIT"
+}
