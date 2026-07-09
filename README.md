@@ -1,109 +1,181 @@
 # Open Tauri Remote UI
 
-**Open Tauri Remote UI** is a plugin that allows you to expose your Tauri application's UI to any web browser, enabling seamless remote interaction for development and end-to-end testing. The plugin bridges your native app and commercial browsers, letting you use standard web automation tools for testing and debugging—without modifying your app's logic.
+A Tauri v2 plugin that exposes your application's UI to any web browser, enabling
+remote interaction, frontend debugging, and E2E testing using standard web tools.
 
-## Badges
-![Crates.io Version](https://img.shields.io/crates/v/open-tauri-remote-ui?style=flat&label=crates.io%20%3A%20open-tauri-remote-ui) ![NPM Version](https://img.shields.io/npm/v/open-tauri-remote-ui?label=npm%20%3A%20open-tauri-remote-ui)
+**Fork features:** transparent `@tauri-apps/api` proxy over WebSocket — all
+native Tauri APIs (`app`, `window`, `event`, `core`, etc.) work in the browser
+without any import changes. Just add one side-effect import.
 
+Original by [DraviaVemal](https://github.com/DraviaVemal).
+Enhanced by [ant-cave](https://github.com/ant-cave).
+
+---
 
 ## Features
 
-- **Remote UI Exposure:** Interact with your Tauri app from any browser.
-- **Seamless Development:** Enable Development debug attachment for fronend debugging.
-- **Seamless E2E Testing:** Use existing web automation/testing tools.
-- **Automatic Transport Switching:** IPC for WebView, WebSocket for browsers—handled transparently.
-- **Customizable Security:** Control and secure remote access as needed.
-- **Future Compatibility For Test Migration:** When [CEF-RS](https://github.com/tauri-apps/cef-rs) becomes available, the same E2E tests (e.g., written with Playwright or similar tools that use the Chromium debug port) will work seamlessly in debug mode, ensuring long-term support for modern testing workflows.
+| Capability | WebView (IPC) | Browser (WS) |
+|---|---|---|
+| `invoke` (any command) | ✅ | ✅ |
+| Event `listen` / `once` | ✅ | ✅ |
+| `@tauri-apps/api/app` (getName, getVersion, …) | ✅ | ✅ via bridge |
+| `@tauri-apps/api/window` (title, size, …) | ✅ | ✅ via bridge |
+| `@tauri-apps/api/event` (listen, emit) | ✅ | ✅ via bridge |
+| Rust `emit` → browser | ✅ | ✅ via `EmitterExt` |
+| Custom security & origin control | ✅ | ✅ |
 
-## Completed Features
-
-### Javascript
-- **api/core** - `invoke`
-- **api/event** - `listen`
-- **api/app**
-  - `defaultWindowIcon`,`fetchDataStoreIdentifiers`,`getBundleType`,
-  - `getIdentifier`,`getName`,`getTauriVersion`,
-  - `getVersion`,`hide`,`removeDataStore`,
-  - `setDockVisibility`,`setTheme`,`show`
-
-### Rust
-- `emit` - Emit method is updated to handle in this plugin.
-
-## Operation Flow
-
-- **WebView:** Uses IPC for communication between frontend and backend.
-- **Commercial Browser:** Uses WebSocket (WS) for remote frontend-backend communication.
-- **Automatic Switching:** The Rust backend plugin and npm frontend wrapper handle transport selection automatically.
-- **Security:** The exposure of the web app can be secured and customized by the end user.
+---
 
 ## Usage
 
-1. **Install the Rust plugin** in your Tauri project `cargo add open-tauri-remote-ui`.
-2. **Initialize the Rust plugin** 
-```rust
-pub fn run() {
-    tauri::Builder::default()
-        .plugin(open_tauri_remote_ui::init())
-        .invoke_handler(tauri::generate_handler![
-            increment,
-            decrement,
-            enable_server,
-            disable_server,
-            exit_app,
-        ])
-        .setup(|app| {
-            app.manage(Arc::new(RwLock::new(Counter { now: 0 })));
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
+### 1. Rust side
+
+```bash
+cargo add open-tauri-remote-ui
 ```
-3. **Replace Emitter trait**
+
 ```rust
-use tauri::Emitter;
-webview_window.emit(data)
+use open_tauri_remote_ui::{RemoteUiConfig, RemoteUiExt};
+
+tauri::Builder::default()
+    .plugin(open_tauri_remote_ui::init())
+    .setup(|app| {
+        // Auto-start WebSocket server on launch
+        let handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            handle.start_remote_ui(
+                RemoteUiConfig::default().set_port(Some(9090)),
+            ).await.ok();
+        });
+        Ok(())
+    })
+    .invoke_handler(tauri::generate_handler![/* your commands */])
+    .run(tauri::generate_context!())
+    .expect("error running app");
 ```
-To
-```rust
-use open_tauri_remote_ui::EmitterExt;
-webview_window.emit(data).await
+
+If you use `window.emit()` in Rust, replace `use tauri::Emitter` with
+`use open_tauri_remote_ui::EmitterExt` so events also get forwarded to
+browser clients.
+
+### 2. Frontend — zero-effort (recommended)
+
+```bash
+npm install open-tauri-remote-ui
 ```
-4. **Start/Stop Server**
-```rust
-async fn enable_server(app: AppHandle) -> String {
-    match app.start_remote_ui(RemoteUiConfig::default().set_port(Some(9090))).await {
-        Ok(()) => format!("Server Started."),
-        Err(err) => format!("Server Error {:?}", err),
-    }
-}
-async fn disable_server(app: AppHandle) -> String {
-    match app.stop_remote_ui().await {
-        Ok(()) => format!("Server Stoped"),
-        Err(err) => format!("Server Error {:?}", err),
-    }
-}
-```
-5. **Install the NPM plugin** in your frontend `npm i open-tauri-remote-ui`.
-6. **Replace the NPM package** 
+
+In your app entry point (`main.ts` / `main.js`), add **one line** at the top:
+
 ```typescript
+// Auto-inject __TAURI_INTERNALS__ WS proxy — @tauri-apps/api works everywhere
+import "open-tauri-remote-ui/bridge-init";
+
+// Keep using @tauri-apps/api as-is — no import changes needed
 import { invoke } from "@tauri-apps/api/core";
+import { getName } from "@tauri-apps/api/app";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 ```
-To
+
+That's it. All `@tauri-apps/api` calls automatically go through IPC in
+WebView and WebSocket in the browser — no `if (isTauri())` branches needed.
+
+### 3. Frontend — explicit API (alternative)
+
+If you prefer explicit imports from this package instead of the transparent
+bridge:
+
 ```typescript
-import { invoke } from "open-tauri-remote-ui/api/core";
-import { listen } from "open-tauri-remote-ui/api/event";
+import { invoke, setBaseUrl } from "open-tauri-remote-ui/api/core";
+import { listen, once } from "open-tauri-remote-ui/api/event";
 ```
-7. **Development WebSocket Proxy** `/remote_ui_ws` proxy remote_ui url ws to your dev server like vite.
-8. **Enable Source Map and update lauch.json setup in vscode to debug frontend**
+
+### 4. Vite dev proxy
+
+```typescript
+// vite.config.ts
+server: {
+  proxy: {
+    "/remote_ui_ws": {
+      target: "ws://127.0.0.1:9090",
+      ws: true,
+    },
+  },
+},
+```
+
+### 5. Start / Stop server manually
+
+```rust
+async fn enable_server(app: AppHandle, port: u16) -> Result<String, String> {
+    app.start_remote_ui(
+        RemoteUiConfig::default().set_port(Some(port))
+    ).await.map_err(|e| e.to_string())?;
+    Ok(format!("Server started on {}", port))
+}
+
+async fn disable_server(app: AppHandle) -> Result<String, String> {
+    app.stop_remote_ui().await.map_err(|e| e.to_string())?;
+    Ok("Server stopped".to_string())
+}
+```
+
+---
+
+## How the bridge works
+
+The `__TAURI_INTERNALS__` proxy shim (`installTauriBridge`) is injected when
+your app runs in a browser. It mimics the real Tauri runtime:
+
+```
+Browser (@tauri-apps/api/*)
+  ↓
+window.__TAURI_INTERNALS__.invoke(cmd, args)
+  ├── "plugin:event|listen"  ──→  local WS event system (no round-trip)
+  ├── "plugin:event|unlisten" ──→  remove local listener
+  └── everything else         ──→  WS → Rust → WebView IPC → response
+```
+
+- `transformCallback` / `runCallback` — managed locally in `ShimCallbackManager`
+- `metadata` — hardcoded to `{ label: "main" }` (single-window mode)
+- `convertFileSrc` — returns path as-is (browser has no asset protocol)
+- `plugins.path` — inferred from `navigator.platform`
+- `__TAURI_REMOTE_UI_SHIM__` flag — lets apps distinguish shim from real Tauri
+
+---
+
+## Package exports
+
+| Import path | What it provides |
+|---|---|
+| `open-tauri-remote-ui/bridge-init` | Side-effect — auto-install bridge (recommended) |
+| `open-tauri-remote-ui/api/bridge` | `{ installTauriBridge }` — manual install |
+| `open-tauri-remote-ui/api/core` | `{ invoke, setBaseUrl }` |
+| `open-tauri-remote-ui/api/event` | `{ listen, once }` |
+| `open-tauri-remote-ui` | Re-exports all of the above |
+
+---
 
 ## Plugin Development
 
-- Build Rust: `cargo build`
-- Build JS: `cd guest-js && pnpm build`
-- Example app: See `examples/tauri-app/`
+```bash
+# Build Rust
+cargo build
+
+# Build JS
+cd guest-js && npm run build
+
+# Test app
+cd test/vue-app && npm run dev
+```
+
+---
 
 ## License
 
 MIT
+
+Original work Copyright (c) 2025 **DraviaVemal**  
+Modifications and additions Copyright (c) 2026 **ant-cave** (<antmmmmm@126.com> / https://github.com/ant-cave)
+
+See [LICENSE](./LICENSE) for the full license text.

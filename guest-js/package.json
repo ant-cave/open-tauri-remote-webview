@@ -14,6 +14,14 @@
     "./api/event": {
       "types": "./dist-js/api/event.d.ts",
       "import": "./dist-js/api/event.js"
+    },
+    "./api/bridge": {
+      "types": "./dist-js/api/bridge.d.ts",
+      "import": "./dist-js/api/bridge.js"
+    },
+    "./bridge-init": {
+      "types": "./dist-js/src/bridge-init.d.ts",
+      "import": "./dist-js/src/bridge-init.js"
     }
   },
   "scripts": {
@@ -21,7 +29,16 @@
     "prepublishOnly": "npm run build"
   },
   "files": ["dist-js"],
+  "peerDependencies": {
+    "@tauri-apps/api": "^2.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tauri-apps/api": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@tauri-apps/api": "^2.0.0",
     "typescript": "^5.0.0"
   },
   "license": "MIT"

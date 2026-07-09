@@ -1,3 +1,7 @@
+// MIT License
+// Copyright (c) 2026 ant-cave <antmmmmm@126.com> (https://github.com/ant-cave)
+// See LICENSE file in the root directory.
+
 import { wsInvoke } from "./ws-invoke.js";
 import { addEventListener } from "./ws-event.js";
 

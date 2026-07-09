@@ -37,6 +37,9 @@ repository = "https://github.com/your-username/open-tauri-remote-ui"
 name = "open_tauri_remote_ui"
 path = "src/lib.rs"
 
+[dependencies.chrono]
+version = "0.4"
+
 [dependencies.futures]
 version = "0.3"
 
