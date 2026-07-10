@@ -25,6 +25,13 @@ function isRealTauri(): boolean {
 }
 
 // ── Categories ───────────────────────────────────────────
+interface TestResult {
+  passed: number;
+  failed: number;
+  total: number;
+}
+const results = ref<Record<string, TestResult>>({});
+
 const categories = [
   { id: "basic", label: "基本类型", open: false },
   { id: "complex", label: "复杂类型", open: false },
@@ -183,60 +190,88 @@ async function testStopServer() {
   add("server", "服务器已停止");
 }
 
-// ── Run All ─────────────────────────────────────────────
+// ── Test runner ───────────────────────────────────────
+type TestFn = () => Promise<void>;
+
+async function runTestFn(id: CatId, name: string, fn: TestFn) {
+  try {
+    await fn();
+    results.value[id] ??= { passed: 0, failed: 0, total: 0 };
+    results.value[id].passed++;
+    results.value[id].total++;
+  } catch (e) {
+    add(id, `❌ ${name}: ${e}`);
+    results.value[id] ??= { passed: 0, failed: 0, total: 0 };
+    results.value[id].failed++;
+    results.value[id].total++;
+  }
+}
+
 async function runCategory(id: CatId) {
   add(id, `=== 开始 ${id} 测试 ===`);
+  results.value[id] = { passed: 0, failed: 0, total: 0 };
   switch (id) {
     case "basic":
-      await testEchoString();
-      await testAddNumbers();
-      await testToBool();
-      await testEchoJson();
+      await runTestFn(id, "echo_string", testEchoString);
+      await runTestFn(id, "add_numbers", testAddNumbers);
+      await runTestFn(id, "to_bool", testToBool);
+      await runTestFn(id, "echo_json", testEchoJson);
       break;
     case "complex":
-      await testGetUser();
-      await testGetPaginated();
+      await runTestFn(id, "get_user", testGetUser);
+      await runTestFn(id, "get_paginated", testGetPaginated);
       break;
     case "error":
-      await testAlwaysFails();
-      await testDivideOk();
-      await testDivideByZero();
+      await runTestFn(id, "always_fails", testAlwaysFails);
+      await runTestFn(id, "divide(ok)", testDivideOk);
+      await runTestFn(id, "divide(by zero)", testDivideByZero);
       break;
     case "events":
-      await testEmitAndListen();
-      await testOnce();
+      await runTestFn(id, "emit_and_listen", testEmitAndListen);
+      await runTestFn(id, "once", testOnce);
       break;
     case "app":
-      await testAppInfo();
+      await runTestFn(id, "app_info", testAppInfo);
       break;
     case "window":
-      await testWindowInfo();
+      await runTestFn(id, "window_info", testWindowInfo);
       break;
     case "counter":
-      await testIncrement();
+      await runTestFn(id, "increment", testIncrement);
       break;
     case "notes":
-      await testWriteNotes();
-      await testReadNotes();
+      await runTestFn(id, "write_notes", testWriteNotes);
+      await runTestFn(id, "read_notes", testReadNotes);
       break;
     case "server":
       if (serverRunning.value) {
-        await testStopServer();
+        await runTestFn(id, "stop_server", testStopServer);
       } else {
-        await testStartServer();
+        await runTestFn(id, "start_server", testStartServer);
       }
       break;
   }
-  add(id, `=== ${id} 测试完成 ===`);
+  const r = results.value[id]!;
+  add(id, `=== ${id} 测试完成: ✅ ${r.passed}/${r.total} 通过 ❌ ${r.failed} 失败 ===`);
 }
 
 async function runAll() {
   log.value = [];
-  add("system", "正在运行所有测试...");
+  results.value = {};
+  add("system", "========================================");
+  add("system", "  开始运行所有测试");
+  add("system", "========================================");
+  const start = Date.now();
   for (const cat of categories) {
     await runCategory(cat.id as CatId);
   }
-  add("system", "所有测试完成");
+  const elapsed = Date.now() - start;
+  const total = Object.values(results.value).reduce((s, r) => s + r.total, 0);
+  const passed = Object.values(results.value).reduce((s, r) => s + r.passed, 0);
+  const failed = Object.values(results.value).reduce((s, r) => s + r.failed, 0);
+  add("system", "========================================");
+  add("system", `  🎯 测试结论: ✅ ${passed}/${total} 通过 ❌ ${failed} 失败 ⏱ ${(elapsed / 1000).toFixed(1)}s`);
+  add("system", "========================================");
 }
 
 onMounted(async () => {
@@ -277,17 +312,21 @@ onMounted(async () => {
           <strong>{{ cat.label }}</strong>
           <button class="btn btn-sm" @click="runCategory(cat.id as CatId)">运行</button>
         </div>
-        <p class="cat-desc">
-          <template v-if="cat.id === 'basic'">echo_string, add_numbers, to_bool, echo_json</template>
-          <template v-else-if="cat.id === 'complex'">get_user (结构体), get_paginated (泛型)</template>
-          <template v-else-if="cat.id === 'error'">always_fails, divide (正常 + 除零)</template>
-          <template v-else-if="cat.id === 'events'">listen, once, trigger_event</template>
-          <template v-else-if="cat.id === 'app'">getName, getVersion, getTauriVersion</template>
-          <template v-else-if="cat.id === 'window'">title, size, position, theme 等</template>
-          <template v-else-if="cat.id === 'counter'">通过 invoke 的原子计数器</template>
-          <template v-else-if="cat.id === 'notes'">读写文件系统</template>
-          <template v-else-if="cat.id === 'server'">启动/停止 WS 远程访问服务器</template>
-        </p>
+          <p class="cat-desc">
+            <template v-if="cat.id === 'basic'">echo_string, add_numbers, to_bool, echo_json</template>
+            <template v-else-if="cat.id === 'complex'">get_user (结构体), get_paginated (泛型)</template>
+            <template v-else-if="cat.id === 'error'">always_fails, divide (正常 + 除零)</template>
+            <template v-else-if="cat.id === 'events'">listen, once, trigger_event</template>
+            <template v-else-if="cat.id === 'app'">getName, getVersion, getTauriVersion</template>
+            <template v-else-if="cat.id === 'window'">title, size, position, theme 等</template>
+            <template v-else-if="cat.id === 'counter'">通过 invoke 的原子计数器</template>
+            <template v-else-if="cat.id === 'notes'">读写文件系统</template>
+            <template v-else-if="cat.id === 'server'">启动/停止 WS 远程访问服务器</template>
+          </p>
+          <p v-if="results[cat.id]" class="cat-result" :class="results[cat.id].failed > 0 ? 'result-fail' : 'result-pass'">
+            ✅ {{ results[cat.id].passed }}/{{ results[cat.id].total }} 通过
+            <template v-if="results[cat.id].failed > 0">❌ {{ results[cat.id].failed }} 失败</template>
+          </p>
       </div>
     </section>
 
@@ -323,6 +362,9 @@ header h1 { font-size: 22px; margin-bottom: 8px; }
 .cat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; }
 .cat-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
 .cat-desc { font-size: 12px; color: #8b949e; }
+.cat-result { font-size: 11px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #30363d; }
+.result-pass { color: #2ea043; }
+.result-fail { color: #da3633; }
 
 .log-section h2 { font-size: 16px; margin-bottom: 8px; }
 .log { background: #010409; border: 1px solid #30363d; border-radius: 8px; padding: 12px; min-height: 200px; max-height: 500px; overflow-y: auto; font-size: 13px; line-height: 1.6; font-family: "JetBrains Mono", "Fira Code", monospace; white-space: pre-wrap; word-break: break-all; }

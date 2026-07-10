@@ -39,5 +39,5 @@ export function getWsStats(): WsStats {
   return wsClient.getStats();
 }
 
-export { initFloatingBadge } from "../src/floating-badge.js";
+export { initFloatingBadge, disableFloatingBadge } from "../src/floating-badge.js";
 export type { FloatingBadgeOptions } from "../src/floating-badge.js";

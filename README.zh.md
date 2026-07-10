@@ -115,6 +115,19 @@ import { listen } from "@tauri-apps/api/event";
 所有 `@tauri-apps/api` 调用在 WebView 中走 IPC、在浏览器中走 WebSocket，
 无需写 `if (isTauri())` 分支。
 
+`bridge-init` 会自动显示 **WS 连接状态悬浮窗**（可拖动，点击展开调试面板）。
+如需关闭：
+
+```typescript
+// 方式 1 — import 前设置全局标记
+window.__ORUI_DISABLE_BADGE__ = true;
+import "open-tauri-remote-webview/bridge-init";
+
+// 方式 2 — 运行时动态关闭
+import { disableFloatingBadge } from "open-tauri-remote-webview/api/core";
+disableFloatingBadge();
+```
+
 ### 3. 前端 — 显式 API（备选）
 
 ```typescript
@@ -178,12 +191,14 @@ window.__TAURI_INTERNALS__.invoke(cmd, args)
 
 ## WS 连接状态悬浮窗
 
-在入口处调用即可显示可拖动的连接状态悬浮窗，点击查看详细调试信息：
+`bridge-init` 会自动显示可拖动的连接状态悬浮窗，点击查看详细调试信息。
+如需手动控制：
 
 ```typescript
-import { initFloatingBadge } from "open-tauri-remote-webview/api/core";
+import { initFloatingBadge, disableFloatingBadge } from "open-tauri-remote-webview/api/core";
 
-initFloatingBadge();
+initFloatingBadge();      // 显示
+disableFloatingBadge();   // 关闭
 ```
 
 功能：
@@ -200,7 +215,7 @@ initFloatingBadge();
 |---|---|
 | `open-tauri-remote-webview/bridge-init` | 副作用模块 — 自动安装桥接（推荐） |
 | `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — 手动安装 |
-| `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge }` |
+| `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge, disableFloatingBadge }` |
 | `open-tauri-remote-webview/api/event` | `{ listen, once }` |
 | `open-tauri-remote-webview` | 重新导出以上所有内容 |
 
@@ -215,8 +230,11 @@ cargo build
 # 编译 JS
 cd guest-js && npm run build
 
-# 测试应用
-cd test/vue-app && npm run dev
+# 测试应用（有窗口 + devtools）
+cd test/vue-app && npm run tauri dev
+
+# 测试应用（无头模式，只跑 WS 无窗口）
+cd test/vue-app && npm run rdev
 ```
 
 ---

@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicI32, Ordering};
-use tauri::{Emitter, Manager};
+use tauri::Emitter;
 use serde::Serialize;
 use std::fs;
 
@@ -152,7 +152,18 @@ pub fn run() {
             write_notes,
         ])
         .setup(|app| {
-            if let Some(window) = app.get_webview_window("main") {
+            #[cfg(not(feature = "headless"))]
+            {
+                use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+                let window = WebviewWindowBuilder::new(
+                    app,
+                    "main",
+                    WebviewUrl::App("index.html".into()),
+                )
+                .title("Vue App")
+                .inner_size(800.0, 600.0)
+                .resizable(true)
+                .build()?;
                 let _ = window.open_devtools();
             }
             let app_handle = app.handle().clone();

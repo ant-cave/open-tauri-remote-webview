@@ -29,8 +29,19 @@ export interface FloatingBadgeOptions {
   visible?: boolean;
 }
 
+let cleanupFloatingBadge: (() => void) | null = null;
+
+export function disableFloatingBadge() {
+  if (cleanupFloatingBadge) {
+    cleanupFloatingBadge();
+    cleanupFloatingBadge = null;
+  }
+}
+
 export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   if (typeof document === "undefined") return () => {};
+  // If already initialized, clean up first
+  if (cleanupFloatingBadge) cleanupFloatingBadge();
 
   const pos = options?.position ?? "bottom-right";
   let showDebug = false;
@@ -239,11 +250,13 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   }
 
   // ---- destroy ----
-  return () => {
+  cleanupFloatingBadge = () => {
     badge.removeEventListener("pointerdown", onPointerDown);
     badge.removeEventListener("pointermove", onPointerMove);
     badge.removeEventListener("pointerup", onPointerUp);
     if (statsTimer) clearInterval(statsTimer);
     badge.remove();
+    cleanupFloatingBadge = null;
   };
+  return cleanupFloatingBadge;
 }

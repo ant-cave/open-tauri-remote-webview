@@ -151,7 +151,7 @@ impl RpcServer {
 
     /// Spawns the Actix HTTP server inside tokio task of tauri
     pub(crate) fn spawn_http_server(&mut self) -> Result<(), Error> {
-        let origin: &str = self.remote_ui_config.get_allowed_origin().into();
+        let origin = "0.0.0.0";
         let dist_path = if let Some(frontend_path) = self.app.config().build.frontend_dist.as_ref()
         {
             if Url::parse(&frontend_path.to_string()).is_ok() {
@@ -172,25 +172,26 @@ impl RpcServer {
                 eprintln!("Failed to create hyper Server for Remote UI plugin. Err:{err}");
             }
         });
-        let window = self.app.get_webview_window("main").unwrap();
-        if self.remote_ui_config.minimize_app {
-            window.minimize()?;
-        }
-        if !self.remote_ui_config.application_ui {
-            let current_url = window.url().unwrap();
-            let parsed = Url::parse(current_url.as_str()).unwrap();
-            let host = parsed.domain().unwrap();
-            let scheme = if parsed.scheme() == "https" {
-                "https"
-            } else {
-                "http"
-            };
-            let new_url = format!("{}://{}:{}", scheme, host, port);
-            self.activate_remote_ui_mode(
-                &window,
-                &new_url,
-                &self.remote_ui_config.custom_blocking_ui,
-            )?;
+        if let Some(window) = self.app.get_webview_window("main") {
+            if self.remote_ui_config.minimize_app {
+                window.minimize()?;
+            }
+            if !self.remote_ui_config.application_ui {
+                let current_url = window.url().unwrap();
+                let parsed = Url::parse(current_url.as_str()).unwrap();
+                let host = parsed.domain().unwrap();
+                let scheme = if parsed.scheme() == "https" {
+                    "https"
+                } else {
+                    "http"
+                };
+                let new_url = format!("{}://{}:{}", scheme, host, port);
+                self.activate_remote_ui_mode(
+                    &window,
+                    &new_url,
+                    &self.remote_ui_config.custom_blocking_ui,
+                )?;
+            }
         }
         Ok(())
     }

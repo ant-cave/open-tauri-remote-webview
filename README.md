@@ -126,6 +126,19 @@ import { listen } from "@tauri-apps/api/event";
 That's it. All `@tauri-apps/api` calls automatically go through IPC in
 WebView and WebSocket in the browser — no `if (isTauri())` branches needed.
 
+`bridge-init` also auto-shows a **WS connection status floating badge** (draggable,
+click to expand debug panel). To suppress it:
+
+```typescript
+// Method 1 — set flag before import (globally disable)
+window.__ORUI_DISABLE_BADGE__ = true;
+import "open-tauri-remote-webview/bridge-init";
+
+// Method 2 — call at runtime (toggle off)
+import { disableFloatingBadge } from "open-tauri-remote-webview/api/core";
+disableFloatingBadge();
+```
+
 ### 3. Frontend — explicit API (alternative)
 
 If you prefer explicit imports from this package instead of the transparent
@@ -196,7 +209,7 @@ window.__TAURI_INTERNALS__.invoke(cmd, args)
 |---|---|
 | `open-tauri-remote-webview/bridge-init` | Side-effect — auto-install bridge (recommended) |
 | `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — manual install |
-| `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl }` |
+| `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge, disableFloatingBadge }` |
 | `open-tauri-remote-webview/api/event` | `{ listen, once }` |
 | `open-tauri-remote-webview` | Re-exports all of the above |
 
@@ -211,8 +224,11 @@ cargo build
 # Build JS
 cd guest-js && npm run build
 
-# Test app
-cd test/vue-app && npm run dev
+# Test app (with window + devtools)
+cd test/vue-app && npm run tauri dev
+
+# Test app (headless, WS only — no window)
+cd test/vue-app && npm run rdev
 ```
 
 ---
