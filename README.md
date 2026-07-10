@@ -3,6 +3,10 @@
 A Tauri v2 plugin that exposes your application's UI to any web browser, enabling
 remote interaction, frontend debugging, and E2E testing using standard web tools.
 
+This project is based on [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0)
+by [DraviaVemal](https://github.com/DraviaVemal), modified under the MIT license.
+All modifications are Copyright (c) 2026 **ant-cave**.
+
 **Fork features:** transparent `@tauri-apps/api` proxy over WebSocket — all
 native Tauri APIs (`app`, `window`, `event`, `core`, etc.) work in the browser
 without any import changes. Just add one side-effect import.
@@ -173,9 +177,9 @@ cd test/vue-app && npm run dev
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE) for the full text.
 
-Original work Copyright (c) 2025 **DraviaVemal**  
-Modifications and additions Copyright (c) 2026 **ant-cave** (<antmmmmm@126.com> / https://github.com/ant-cave)
+Based on [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0)
+Copyright (c) 2025 **DraviaVemal**, used under MIT.
 
-See [LICENSE](./LICENSE) for the full license text.
+Modifications and additions Copyright (c) 2026 **ant-cave** (<antmmmmm@126.com> / https://github.com/ant-cave).

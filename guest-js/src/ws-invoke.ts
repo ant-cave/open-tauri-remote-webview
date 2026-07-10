@@ -9,6 +9,7 @@ let nextId = 1;
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (reason: unknown) => void;
+  sendTime: number;
 }
 
 const pending = new Map<number, PendingRequest>();
@@ -22,7 +23,7 @@ export async function wsInvoke<T>(cmd: string, args?: Record<string, unknown>): 
   }
 
   return new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+    pending.set(id, { resolve: resolve as (value: unknown) => void, reject, sendTime: Date.now() });
     wsClient.send(JSON.stringify(request));
   });
 }
@@ -43,6 +44,10 @@ wsClient.onMessage((data: string) => {
     const pendingReq = pending.get(record.id);
     if (!pendingReq) return;
     pending.delete(record.id);
+
+    // 测量往返延迟
+    const rtt = Date.now() - pendingReq.sendTime;
+    wsClient.setLatency(rtt);
 
     try {
       const payload = JSON.parse(record.payload as string);

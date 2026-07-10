@@ -31,7 +31,7 @@ autobenches = false
 description = "A Tauri plugin that exposes the application’s UI to a web browser, allowing full interaction while the native app continues running. This enables frontend debug, end-to-end UI testing using existing web-based testing tools without requiring modifications to the app itself."
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/your-username/open-tauri-remote-ui"
+repository = "https://github.com/ant-cave/open-tauri-remote-ui"
 
 [lib]
 name = "open_tauri_remote_ui"

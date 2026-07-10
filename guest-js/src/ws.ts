@@ -1,5 +1,15 @@
 type MessageHandler = (data: string) => void;
 
+export interface WsStats {
+  status: string;
+  url: string | null;
+  connectCount: number;
+  reconnectCount: number;
+  uptime: number | null;
+  lastError: string | null;
+  latency: number | null;
+}
+
 // 前端日志辅助函数 — 格式: [年月日][时分秒][函数/模块][文件:行数][级别] 具体信息
 function wsLog(level: string, module: string, message: string) {
   const now = new Date();
@@ -18,17 +28,89 @@ function wsLog(level: string, module: string, message: string) {
   }
 }
 
+type StatusCallback = (status: string) => void;
+
 class WsClient {
   private ws: WebSocket | null = null;
   private url: string | null = null;
   private handlers: Set<MessageHandler> = new Set();
+  private statusCallbacks: Set<StatusCallback> = new Set();
   private sendQueue: string[] = [];
-  /** WebSocket 连接尝试次数 (用于调试) */
   private connectAttempts = 0;
+  private shouldReconnect = true;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectDelay = 1000;
+  private _connecting = false;
+
+  private _connectCount = 0;
+  private _connectTimestamp: number | null = null;
+  private _lastError: string | null = null;
+  private _latency: number | null = null;
+
+  getStats(): WsStats {
+    return {
+      status: this.getStatus(),
+      url: this.url,
+      connectCount: this._connectCount,
+      reconnectCount: Math.max(0, this.connectAttempts - this._connectCount),
+      uptime: this.ws && this.ws.readyState === WebSocket.OPEN && this._connectTimestamp
+        ? Date.now() - this._connectTimestamp : null,
+      lastError: this._lastError,
+      latency: this._latency,
+    };
+  }
+
+  setLatency(ms: number) {
+    this._latency = ms;
+  }
+
+  onStatusChange(cb: StatusCallback): () => void {
+    this.statusCallbacks.add(cb);
+    // 立即通知当前状态
+    cb(this.getStatus());
+    return () => this.statusCallbacks.delete(cb);
+  }
+
+  private notifyStatus(status: string) {
+    for (const cb of this.statusCallbacks) {
+      try { cb(status); } catch { /* ignore */ }
+    }
+  }
+
+  getStatus(): string {
+    if (!this.ws) return "disconnected";
+    switch (this.ws.readyState) {
+      case WebSocket.CONNECTING: return "connecting";
+      case WebSocket.OPEN: return "connected";
+      case WebSocket.CLOSING: return "closing";
+      case WebSocket.CLOSED: return "disconnected";
+      default: return "unknown";
+    }
+  }
 
   setUrl(url: string) {
     wsLog("INFO", "WsClient.setUrl", `设置 WebSocket URL: ${url}`);
     this.url = url;
+  }
+
+  private scheduleReconnect() {
+    if (!this.shouldReconnect) return;
+    wsLog("INFO", "WsClient.scheduleReconnect",
+      `${this.reconnectDelay}ms 后尝试重新连接...`);
+    this.notifyStatus("connecting");
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this.connect().catch(() => {});
+    }, this.reconnectDelay);
+    this.reconnectDelay = Math.min(this.reconnectDelay * 2, 30000);
+  }
+
+  private cancelReconnect() {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectDelay = 1000;
   }
 
   private detectUrl(): string {
@@ -48,6 +130,18 @@ class WsClient {
       wsLog("INFO", "WsClient.connect", "WebSocket 已处于 OPEN 状态，跳过连接");
       return Promise.resolve();
     }
+    if (this._connecting) {
+      wsLog("DEBUG", "WsClient.connect", "连接已在进行中，等待完成...");
+      return new Promise((resolve) => {
+        const unsub = this.onStatusChange((status) => {
+          if (status === "connected") {
+            unsub();
+            resolve();
+          }
+        });
+      });
+    }
+    this._connecting = true;
     this.connectAttempts++;
     wsLog("INFO", "WsClient.connect", `开始 WebSocket 连接 (尝试 #${this.connectAttempts})...`);
     return new Promise((resolve, reject) => {
@@ -56,6 +150,11 @@ class WsClient {
       const ws = new WebSocket(url);
       ws.onopen = () => {
         wsLog("INFO", "WsClient.connect:onopen", `WebSocket 连接已打开 (尝试 #${this.connectAttempts})`);
+        this._connecting = false;
+        this._connectCount++;
+        this._connectTimestamp = Date.now();
+        this.cancelReconnect();
+        this.notifyStatus("connected");
         this.ws = ws;
         const queueLen = this.sendQueue.length;
         if (queueLen > 0) {
@@ -71,17 +170,29 @@ class WsClient {
       ws.onclose = (event) => {
         wsLog("WARN", "WsClient.connect:onclose",
           `WebSocket 连接关闭: code=${event.code}, reason="${event.reason}", wasClean=${event.wasClean}`);
+        this._connecting = false;
         if (this.ws === ws) {
-          wsLog("INFO", "WsClient.connect:onclose", "当前 WebSocket 实例已关闭，清除引用");
           this.ws = null;
+          this.notifyStatus("disconnected");
+          if (this.shouldReconnect) {
+            this.scheduleReconnect();
+          }
         } else {
           wsLog("DEBUG", "WsClient.connect:onclose", "忽略非当前实例的关闭事件");
         }
       };
       ws.onerror = (event) => {
         wsLog("ERROR", "WsClient.connect:onerror", `WebSocket 连接错误: ${url}`);
+        this._connecting = false;
+        this._lastError = `连接错误: ${url}`;
         if (this.ws === ws) {
           this.ws = null;
+          this.notifyStatus("error");
+          if (this.shouldReconnect) {
+            this.scheduleReconnect();
+          }
+        } else {
+          wsLog("DEBUG", "WsClient.connect:onerror", "忽略非当前实例的 error 事件");
         }
         reject(new Error(`WebSocket connection failed: ${url}`));
       };
@@ -142,6 +253,8 @@ class WsClient {
 
   close() {
     wsLog("INFO", "WsClient.close", "关闭 WebSocket 连接...");
+    this.shouldReconnect = false;
+    this.cancelReconnect();
     this.sendQueue = [];
     if (this.ws) {
       wsLog("INFO", "WsClient.close", `正在关闭 WebSocket (readyState=${this.ws.readyState})`);

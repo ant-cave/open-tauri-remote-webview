@@ -3,8 +3,9 @@
 // Copyright (c) 2026 ant-cave <antmmmmm@126.com> (https://github.com/ant-cave)
 // See LICENSE file in the root directory.
 
-import wsClient from "../src/ws.js";
+import wsClient, { type WsStats } from "../src/ws.js";
 import { wsInvoke } from "../src/ws-invoke.js";
+export type { WsStats };
 
 function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -25,3 +26,18 @@ export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Pr
   }
   return wsInvoke<T>(cmd, args);
 }
+
+export function getWsStatus(): string {
+  return wsClient.getStatus();
+}
+
+export function onWsStatusChange(cb: (status: string) => void): () => void {
+  return wsClient.onStatusChange(cb);
+}
+
+export function getWsStats(): WsStats {
+  return wsClient.getStats();
+}
+
+export { initFloatingBadge } from "../src/floating-badge.js";
+export type { FloatingBadgeOptions } from "../src/floating-badge.js";

@@ -22,13 +22,19 @@
     "./bridge-init": {
       "types": "./dist-js/src/bridge-init.d.ts",
       "import": "./dist-js/src/bridge-init.js"
+    },
+    "./floating-badge": {
+      "types": "./dist-js/src/floating-badge.d.ts",
+      "import": "./dist-js/src/floating-badge.js"
     }
   },
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build"
   },
-  "files": ["dist-js"],
+  "files": [
+    "dist-js"
+  ],
   "peerDependencies": {
     "@tauri-apps/api": "^2.0.0"
   },
@@ -41,5 +47,8 @@
     "@tauri-apps/api": "^2.0.0",
     "typescript": "^5.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "tslib": "^2.8.1"
+  }
 }
