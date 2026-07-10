@@ -12,11 +12,11 @@
 [package]
 edition = "2021"
 rust-version = "1.77.2"
-name = "open-tauri-remote-ui"
+name = "open-tauri-remote-webview"
 version = "0.14.0"
 authors = ["DraviaVemal"]
 build = "build.rs"
-links = "open-tauri-remote-ui"
+links = "open-tauri-remote-webview"
 exclude = [
     "/examples",
     "/dist-js",
@@ -31,10 +31,10 @@ autobenches = false
 description = "A Tauri plugin that exposes the application’s UI to a web browser, allowing full interaction while the native app continues running. This enables frontend debug, end-to-end UI testing using existing web-based testing tools without requiring modifications to the app itself."
 readme = "README.md"
 license = "MIT"
-repository = "https://github.com/ant-cave/open-tauri-remote-ui"
+repository = "https://github.com/ant-cave/open-tauri-remote-webview"
 
 [lib]
-name = "open_tauri_remote_ui"
+name = "open_tauri_remote_webview"
 path = "src/lib.rs"
 
 [dependencies.chrono]

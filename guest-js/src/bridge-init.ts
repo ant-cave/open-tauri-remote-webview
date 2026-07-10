@@ -6,7 +6,7 @@
  * Side-effect module: auto-installs `__TAURI_INTERNALS__` shim in browser
  * and pre-warms the WebSocket connection.
  *
- * Usage: add `import "open-tauri-remote-ui/bridge-init"` once at your app entry
+ * Usage: add `import "open-tauri-remote-webview/bridge-init"` once at your app entry
  * (before any @tauri-apps/api usage). No other code changes needed.
  */
 import { installTauriBridge } from "./tauri-internals.js";

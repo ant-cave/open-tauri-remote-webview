@@ -1,8 +1,8 @@
 {
-  "name": "open-tauri-remote-ui",
+  "name": "open-tauri-remote-webview",
   "version": "0.14.0",
   "private": true,
-  "description": "Remote browser UI access for Tauri v2 apps",
+  "description": "Remote browser webview access for Tauri v2 apps",
   "type": "module",
   "main": "./dist-js/api/index.js",
   "types": "./dist-js/api/index.d.ts",

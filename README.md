@@ -1,6 +1,6 @@
 [中文版](./README.zh.md)
 
-# Open Tauri Remote UI
+# Open Tauri Remote WebView
 
 A Tauri v2 plugin that exposes your application's UI to any web browser, enabling
 remote interaction, frontend debugging, and E2E testing using standard web tools.
@@ -32,19 +32,59 @@ Enhanced by [ant-cave](https://github.com/ant-cave).
 
 ---
 
+## Migration from Native Tauri
+
+Migrating an existing Tauri app to use `open-tauri-remote-webview` requires only a few changes. Most of your frontend code stays **exactly the same**.
+
+### What changes
+
+| Area | Before (native Tauri) | After (remote) |
+|---|---|---|
+| Rust plugin | — | Add `open-tauri-remote-webview` crate + `.plugin(open_tauri_remote_webview::init())` |
+| Rust `window.emit()` | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt` (same call) |
+| Rust start WS server | — | Add `app.start_remote_ui(RemoteUiConfig::default())` in `setup` |
+| Frontend install | — | `npm install open-tauri-remote-webview` |
+| Frontend import | `import "..." from "@tauri-apps/api"` | **No change** — add ONE line: `import "open-tauri-remote-webview/bridge-init"` at entry |
+| `vite.config.ts` | — | Add `/remote_ui_ws` proxy to dev server |
+| `if (isTauri())` guards | Common pattern | **Remove them** — bridge makes everything work everywhere |
+
+### Step-by-step
+
+1. **Rust:** `cargo add open-tauri-remote-webview`, then register the plugin and start the WS server in `setup` (see [Usage > Rust side](#1-rust-side)).
+2. **Frontend:** `npm install open-tauri-remote-webview`, then add `import "open-tauri-remote-webview/bridge-init"` at the top of your entry file (before any `@tauri-apps/api` import).
+3. **Vite:** Add the `/remote_ui_ws` proxy if you use Vite dev server (see [Usage > Vite dev proxy](#4-vite-dev-proxy)).
+4. **Clean up:** Delete all `isTauri()` / `isRunningInTauri()` branches — the bridge transparently proxies IPC calls to WebSocket when running in a browser, and passes through to real Tauri IPC when in WebView.
+5. **Optional:** Replace `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` in your Rust code so events emitted from the backend also reach browser clients.
+
+### What stays the same
+
+- All `@tauri-apps/api/*` imports and usage
+- All Tauri command definitions on the Rust side
+- All frontend build tooling (Vite, Webpack, etc.)
+- All event `listen`/`once`/`emit` patterns
+- All window and app API calls
+
+### Caveats
+
+- **Single-window mode only**: `getCurrentWindow()` always returns with label `"main"`
+- **No asset protocol**: `convertFileSrc()` returns the path as-is; use raw URLs for assets
+- **No `__TAURI__` env**: the bridge sets `__TAURI_REMOTE_UI_SHIM__` instead — check this flag if you need to detect the shim
+
+---
+
 ## Usage
 
 ### 1. Rust side
 
 ```bash
-cargo add open-tauri-remote-ui
+cargo add open-tauri-remote-webview
 ```
 
 ```rust
-use open_tauri_remote_ui::{RemoteUiConfig, RemoteUiExt};
+use open_tauri_remote_webview::{RemoteUiConfig, RemoteUiExt};
 
 tauri::Builder::default()
-    .plugin(open_tauri_remote_ui::init())
+    .plugin(open_tauri_remote_webview::init())
     .setup(|app| {
         // Auto-start WebSocket server on launch
         let handle = app.handle().clone();
@@ -61,20 +101,20 @@ tauri::Builder::default()
 ```
 
 If you use `window.emit()` in Rust, replace `use tauri::Emitter` with
-`use open_tauri_remote_ui::EmitterExt` so events also get forwarded to
+`use open_tauri_remote_webview::EmitterExt` so events also get forwarded to
 browser clients.
 
 ### 2. Frontend — zero-effort (recommended)
 
 ```bash
-npm install open-tauri-remote-ui
+npm install open-tauri-remote-webview
 ```
 
 In your app entry point (`main.ts` / `main.js`), add **one line** at the top:
 
 ```typescript
 // Auto-inject __TAURI_INTERNALS__ WS proxy — @tauri-apps/api works everywhere
-import "open-tauri-remote-ui/bridge-init";
+import "open-tauri-remote-webview/bridge-init";
 
 // Keep using @tauri-apps/api as-is — no import changes needed
 import { invoke } from "@tauri-apps/api/core";
@@ -92,8 +132,8 @@ If you prefer explicit imports from this package instead of the transparent
 bridge:
 
 ```typescript
-import { invoke, setBaseUrl } from "open-tauri-remote-ui/api/core";
-import { listen, once } from "open-tauri-remote-ui/api/event";
+import { invoke, setBaseUrl } from "open-tauri-remote-webview/api/core";
+import { listen, once } from "open-tauri-remote-webview/api/event";
 ```
 
 ### 4. Vite dev proxy
@@ -154,11 +194,11 @@ window.__TAURI_INTERNALS__.invoke(cmd, args)
 
 | Import path | What it provides |
 |---|---|
-| `open-tauri-remote-ui/bridge-init` | Side-effect — auto-install bridge (recommended) |
-| `open-tauri-remote-ui/api/bridge` | `{ installTauriBridge }` — manual install |
-| `open-tauri-remote-ui/api/core` | `{ invoke, setBaseUrl }` |
-| `open-tauri-remote-ui/api/event` | `{ listen, once }` |
-| `open-tauri-remote-ui` | Re-exports all of the above |
+| `open-tauri-remote-webview/bridge-init` | Side-effect — auto-install bridge (recommended) |
+| `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — manual install |
+| `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl }` |
+| `open-tauri-remote-webview/api/event` | `{ listen, once }` |
+| `open-tauri-remote-webview` | Re-exports all of the above |
 
 ---
 

@@ -1,4 +1,4 @@
-# Open Tauri Remote UI
+# Open Tauri Remote WebView
 
 一个 Tauri v2 插件，将应用的 UI 暴露到浏览器中，支持远程交互、前端调试，
 以及使用标准 Web 测试工具进行端到端测试。**无需修改应用代码**。
@@ -23,19 +23,59 @@ by [DraviaVemal](https://github.com/DraviaVemal)，在 MIT 协议下修改。
 
 ---
 
+## 从原生 Tauri 迁移
+
+将现有 Tauri 应用迁移到 `open-tauri-remote-webview` 只需少量改动。绝大部分前端代码**保持不变**。
+
+### 改动对照
+
+| 环节 | 之前（原生 Tauri） | 之后（远程模式） |
+|---|---|---|
+| Rust 插件 | — | 添加 `open-tauri-remote-webview` crate + `.plugin(open_tauri_remote_webview::init())` |
+| Rust `window.emit()` | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt`（调用方式不变） |
+| Rust 启动 WS 服务器 | — | 在 `setup` 中添加 `app.start_remote_ui(RemoteUiConfig::default())` |
+| 前端安装 | — | `npm install open-tauri-remote-webview` |
+| 前端导入 | `import "..." from "@tauri-apps/api"` | **无需改动** — 在入口加一行 `import "open-tauri-remote-webview/bridge-init"` |
+| `vite.config.ts` | — | 添加 `/remote_ui_ws` 代理到 dev server |
+| `if (isTauri())` 守卫 | 常见写法 | **删除它们** — 桥接让所有 API 统一工作 |
+
+### 迁移步骤
+
+1. **Rust 端：** `cargo add open-tauri-remote-webview`，然后在 `setup` 中注册插件并启动 WS 服务器（参见[使用方法 > Rust 端](#1-rust-端)）。
+2. **前端：** `npm install open-tauri-remote-webview`，然后在入口文件顶部添加 `import "open-tauri-remote-webview/bridge-init"`（在任何 `@tauri-apps/api` 导入之前）。
+3. **Vite：** 如果使用 Vite 开发服务器，添加 `/remote_ui_ws` 代理（参见[使用方法 > Vite 开发代理](#4-vite-开发代理)）。
+4. **清理代码：** 删除所有 `isTauri()` / `isRunningInTauri()` 分支 — 桥接会自动判断环境：浏览器中走 WebSocket，WebView 中走真实 IPC。
+5. **可选：** 将 Rust 代码中的 `use tauri::Emitter` 替换为 `use open_tauri_remote_webview::EmitterExt`，使后端发出的事件也能到达浏览器客户端。
+
+### 保持不变的部分
+
+- 所有 `@tauri-apps/api/*` 的导入和使用方式
+- Rust 端的所有 Tauri 命令定义
+- 所有前端构建工具（Vite、Webpack 等）
+- 所有事件 `listen`/`once`/`emit` 的使用模式
+- 所有窗口和应用 API 调用
+
+### 注意事项
+
+- **仅支持单窗口模式**：`getCurrentWindow()` 始终返回 `label: "main"`
+- **无资产协议**：`convertFileSrc()` 原样返回路径，请使用原始 URL 访问资产
+- **无 `__TAURI__` 环境变量**：桥接设置 `__TAURI_REMOTE_UI_SHIM__` 标记 — 如需检测 shim 环境可检查此标记
+
+---
+
 ## 使用方法
 
 ### 1. Rust 端
 
 ```bash
-cargo add open-tauri-remote-ui
+cargo add open-tauri-remote-webview
 ```
 
 ```rust
-use open_tauri_remote_ui::{RemoteUiConfig, RemoteUiExt};
+use open_tauri_remote_webview::{RemoteUiConfig, RemoteUiExt};
 
 tauri::Builder::default()
-    .plugin(open_tauri_remote_ui::init())
+    .plugin(open_tauri_remote_webview::init())
     .setup(|app| {
         let handle = app.handle().clone();
         tauri::async_runtime::spawn(async move {
@@ -51,19 +91,19 @@ tauri::Builder::default()
 ```
 
 如果在 Rust 中使用 `window.emit()`，请将 `use tauri::Emitter` 替换为
-`use open_tauri_remote_ui::EmitterExt`，这样事件也会转发到浏览器客户端。
+`use open_tauri_remote_webview::EmitterExt`，这样事件也会转发到浏览器客户端。
 
 ### 2. 前端 — 零改动（推荐）
 
 ```bash
-npm install open-tauri-remote-ui
+npm install open-tauri-remote-webview
 ```
 
 在应用入口（`main.ts` / `main.js`）顶部**加一行**：
 
 ```typescript
 // 自动注入 __TAURI_INTERNALS__ WS 代理 — @tauri-apps/api 直接使用
-import "open-tauri-remote-ui/bridge-init";
+import "open-tauri-remote-webview/bridge-init";
 
 // 继续使用 @tauri-apps/api，无需任何导入改动
 import { invoke } from "@tauri-apps/api/core";
@@ -78,8 +118,8 @@ import { listen } from "@tauri-apps/api/event";
 ### 3. 前端 — 显式 API（备选）
 
 ```typescript
-import { invoke, setBaseUrl } from "open-tauri-remote-ui/api/core";
-import { listen, once } from "open-tauri-remote-ui/api/event";
+import { invoke, setBaseUrl } from "open-tauri-remote-webview/api/core";
+import { listen, once } from "open-tauri-remote-webview/api/event";
 ```
 
 ### 4. Vite 开发代理
@@ -141,7 +181,7 @@ window.__TAURI_INTERNALS__.invoke(cmd, args)
 在入口处调用即可显示可拖动的连接状态悬浮窗，点击查看详细调试信息：
 
 ```typescript
-import { initFloatingBadge } from "open-tauri-remote-ui/api/core";
+import { initFloatingBadge } from "open-tauri-remote-webview/api/core";
 
 initFloatingBadge();
 ```
@@ -158,11 +198,11 @@ initFloatingBadge();
 
 | 导入路径 | 内容 |
 |---|---|
-| `open-tauri-remote-ui/bridge-init` | 副作用模块 — 自动安装桥接（推荐） |
-| `open-tauri-remote-ui/api/bridge` | `{ installTauriBridge }` — 手动安装 |
-| `open-tauri-remote-ui/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge }` |
-| `open-tauri-remote-ui/api/event` | `{ listen, once }` |
-| `open-tauri-remote-ui` | 重新导出以上所有内容 |
+| `open-tauri-remote-webview/bridge-init` | 副作用模块 — 自动安装桥接（推荐） |
+| `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — 手动安装 |
+| `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge }` |
+| `open-tauri-remote-webview/api/event` | `{ listen, once }` |
+| `open-tauri-remote-webview` | 重新导出以上所有内容 |
 
 ---
 

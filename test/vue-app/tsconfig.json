@@ -12,8 +12,8 @@
     "skipLibCheck": true,
     "noEmit": true,
     "paths": {
-      "open-tauri-remote-ui": ["../../guest-js"],
-      "open-tauri-remote-ui/*": ["../../guest-js/*"]
+      "open-tauri-remote-webview": ["../../guest-js"],
+      "open-tauri-remote-webview/*": ["../../guest-js/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.vue"]

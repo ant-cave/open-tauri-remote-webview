@@ -1,5 +1,5 @@
 [package]
-name = "open-tauri-remote-ui"
+name = "open-tauri-remote-webview"
 version = "0.14.0"
 license = "MIT"
 authors = ["DraviaVemal"]
@@ -7,8 +7,8 @@ description = "A Tauri plugin that exposes the application’s UI to a web brows
 edition = "2021"
 rust-version = "1.77.2"
 exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
-links = "open-tauri-remote-ui"
-repository = "https://github.com/ant-cave/open-tauri-remote-ui"
+links = "open-tauri-remote-webview"
+repository = "https://github.com/ant-cave/open-tauri-remote-webview"
 
 [dependencies]
 tauri = { version = "2" }

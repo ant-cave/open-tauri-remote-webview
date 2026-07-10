@@ -3,7 +3,7 @@ use tauri::{Emitter, Manager};
 use serde::Serialize;
 use std::fs;
 
-use open_tauri_remote_ui::{
+use open_tauri_remote_webview::{
     RemoteUiConfig, RemoteUiExt,
 };
 
@@ -112,7 +112,7 @@ async fn enable_server(app: tauri::AppHandle, port: u16) -> Result<String, Strin
     app.start_remote_ui(
         RemoteUiConfig::default()
             .set_port(Some(port))
-            .set_allowed_origin(open_tauri_remote_ui::OriginType::Localhost),
+            .set_allowed_origin(open_tauri_remote_webview::OriginType::Localhost),
     )
     .await
     .map_err(|e| e.to_string())?;
@@ -129,7 +129,7 @@ async fn disable_server(app: tauri::AppHandle) -> Result<String, String> {
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(open_tauri_remote_ui::init())
+        .plugin(open_tauri_remote_webview::init())
         .invoke_handler(tauri::generate_handler![
             // Basic types
             echo_string,
@@ -158,9 +158,9 @@ pub fn run() {
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 match app_handle.start_remote_ui(
-                    open_tauri_remote_ui::RemoteUiConfig::default()
+                    open_tauri_remote_webview::RemoteUiConfig::default()
                         .set_port(Some(9090))
-                        .set_allowed_origin(open_tauri_remote_ui::OriginType::Localhost),
+                        .set_allowed_origin(open_tauri_remote_webview::OriginType::Localhost),
                 )
                 .await
                 {

@@ -38,7 +38,7 @@ impl<R> EmitterExt<R> for WebviewWindow<R>
 where
     R: Runtime,
 {
-    /// "open-tauri-remote-ui" plugin WS Extension
+    /// "open-tauri-remote-webview" plugin WS Extension
     async fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Result<(), Error> {
         let remote_ui = self.state::<Arc<RwLock<RemoteUi>>>();
         if remote_ui.read().await.is_rpc_active() {
@@ -48,7 +48,7 @@ where
         Ok(())
     }
 
-    /// This method still use Tauri Yet to be supported in "open-tauri-remote-ui" plugin
+    /// This method still use Tauri Yet to be supported in "open-tauri-remote-webview" plugin
     fn emit_to<I, S>(&self, target: I, event: &str, payload: S) -> Result<(), Error>
     where
         I: Into<EventTarget>,
@@ -57,12 +57,12 @@ where
         Emitter::emit_to(self, target, event, payload)
     }
 
-    /// This method still use Tauri Yet to be supported in "open-tauri-remote-ui" plugin
+    /// This method still use Tauri Yet to be supported in "open-tauri-remote-webview" plugin
     fn emit_str(&self, event: &str, payload: String) -> Result<(), Error> {
         Emitter::emit_str(self, event, payload)
     }
 
-    /// This method still use Tauri Yet to be supported in "open-tauri-remote-ui" plugin
+    /// This method still use Tauri Yet to be supported in "open-tauri-remote-webview" plugin
     fn emit_str_to<I>(&self, target: I, event: &str, payload: String) -> Result<(), Error>
     where
         I: Into<EventTarget>,
@@ -70,7 +70,7 @@ where
         Emitter::emit_str_to(self, target, event, payload)
     }
 
-    /// This method still use Tauri Yet to be supported in "open-tauri-remote-ui" plugin
+    /// This method still use Tauri Yet to be supported in "open-tauri-remote-webview" plugin
     fn emit_filter<S, F>(&self, event: &str, payload: S, filter: F) -> Result<(), Error>
     where
         S: Serialize + Clone,
@@ -79,7 +79,7 @@ where
         Emitter::emit_filter(self, event, payload, filter)
     }
 
-    /// This method still use Tauri Yet to be supported in "open-tauri-remote-ui" plugin
+    /// This method still use Tauri Yet to be supported in "open-tauri-remote-webview" plugin
     fn emit_str_filter<F>(&self, event: &str, payload: String, filter: F) -> Result<(), Error>
     where
         F: Fn(&EventTarget) -> bool,

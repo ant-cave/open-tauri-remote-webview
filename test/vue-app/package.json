@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
-    "open-tauri-remote-ui": "file:../../guest-js",
+    "open-tauri-remote-webview": "file:../../guest-js",
     "vue": "^3.5.0"
   },
   "devDependencies": {

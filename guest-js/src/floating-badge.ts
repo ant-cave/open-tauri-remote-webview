@@ -8,7 +8,7 @@
  * Floating WS connection status badge with drag support and debug panel.
  *
  * Usage:
- *   import { initFloatingBadge } from "open-tauri-remote-ui/api/core"
+ *   import { initFloatingBadge } from "open-tauri-remote-webview/api/core"
  *   initFloatingBadge()
  */
 

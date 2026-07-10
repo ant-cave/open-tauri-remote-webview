@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // Auto-install __TAURI_INTERNALS__ shim so @tauri-apps/api works in browser
-import "open-tauri-remote-ui/bridge-init";
+import "open-tauri-remote-webview/bridge-init";
 
 import { ref, onMounted } from "vue";
-import { invoke } from "open-tauri-remote-ui/api/core";
-import { listen, once } from "open-tauri-remote-ui/api/event";
+import { invoke } from "open-tauri-remote-webview/api/core";
+import { listen, once } from "open-tauri-remote-webview/api/event";
 
 // ── Globals ──────────────────────────────────────────────
 const runningInTauri = ref(false);
