@@ -13,7 +13,6 @@
  */
 
 import wsClient from "./ws.js";
-import { getWsStats, getWsStatus, onWsStatusChange } from "../api/core.js";
 
 function formatUptime(ms: number): string {
   if (ms < 1000) return ms + "ms";
@@ -82,6 +81,7 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
 }
 .orui-badge:hover { opacity: 1; }
 .orui-badge:active { cursor: grabbing; }
+.orui-badge { touch-action: none; }
 .orui-badge.orui-bottom-right { bottom: 8px; right: 8px; }
 .orui-badge.orui-bottom-left { bottom: 8px; left: 8px; }
 .orui-badge.orui-top-right { top: 8px; right: 8px; }
@@ -165,13 +165,13 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
     badge.className = "orui-badge orui-" + pos + " orui-" + s;
     label.textContent = s;
   }
-  renderStatus(getWsStatus());
-  onWsStatusChange(renderStatus);
+  renderStatus(wsClient.getStatus());
+  wsClient.onStatusChange(renderStatus);
 
   function renderPanel() {
     if (!showDebug) { panel.style.display = "none"; return; }
     panel.style.display = "block";
-    const stats = getWsStats();
+    const stats = wsClient.getStats();
     const statusClass =
       stats.status === "connected" ? "orui-ok"
       : stats.status === "connecting" ? "orui-warn"

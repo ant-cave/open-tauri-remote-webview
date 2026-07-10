@@ -91,6 +91,8 @@ class WsClient {
   setUrl(url: string) {
     wsLog("INFO", "WsClient.setUrl", `设置 WebSocket URL: ${url}`);
     this.url = url;
+    // URL 变了，之前的连接请求是针对旧地址的，取消等待
+    this._connecting = false;
   }
 
   private scheduleReconnect() {
@@ -133,10 +135,18 @@ class WsClient {
     if (this._connecting) {
       wsLog("DEBUG", "WsClient.connect", "连接已在进行中，等待完成...");
       return new Promise((resolve) => {
-        const unsub = this.onStatusChange((status) => {
+        // onStatusChange 会同步调用回调，此时 unsub 还未赋值。
+        // 用 flag 跳过首次同步回调，只处理后续异步状态变更。
+        let ready = false;
+        let unsub: (() => void) | undefined;
+        unsub = this.onStatusChange((status) => {
+          if (!ready) { ready = true; return; }
           if (status === "connected") {
-            unsub();
+            if (unsub) unsub();
             resolve();
+          } else if (status === "disconnected" || status === "error") {
+            if (unsub) unsub();
+            this.connect().then(resolve).catch(() => {});
           }
         });
       });
