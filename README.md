@@ -1,3 +1,5 @@
+[中文版](./README.zh.md)
+
 # Open Tauri Remote UI
 
 A Tauri v2 plugin that exposes your application's UI to any web browser, enabling
