@@ -5,6 +5,7 @@
 .idea/
 debug.log
 package-lock.json
+!guest-js/package-lock.json
 .vscode/settings.json
 yarn.lock
 
