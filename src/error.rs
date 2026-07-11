@@ -10,6 +10,10 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
   #[error(transparent)]
   Io(#[from] std::io::Error),
+  #[error("WebSocket send error: {0}")]
+  WsSend(String),
+  #[error("Plugin state not found")]
+  StateNotFound,
 }
 
 impl Serialize for Error {

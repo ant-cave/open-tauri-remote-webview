@@ -7,8 +7,13 @@ import wsClient, { type WsStats } from "../src/ws.js";
 import { wsInvoke } from "../src/ws-invoke.js";
 export type { WsStats };
 
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+/** True when running inside the real Tauri WebView (not the browser shim). */
+function isRealTauri(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    "__TAURI_INTERNALS__" in window &&
+    !(window as unknown as Record<string, unknown>).__TAURI_REMOTE_UI_SHIM__
+  );
 }
 
 export function setBaseUrl(url: string) {
@@ -21,7 +26,7 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
 }
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  if (isTauri()) {
+  if (isRealTauri()) {
     return tauriInvoke<T>(cmd, args);
   }
   return wsInvoke<T>(cmd, args);

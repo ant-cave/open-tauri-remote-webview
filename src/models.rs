@@ -112,8 +112,8 @@ impl RemoteUiConfig {
 
     /// Inject standardized HTML, CSS, and JavaScript to allow customization of the UI blocking message during a remote session
     /// Pass %URL% where URL will be updated and %URL_INFO% for info path
-    pub fn set_custom_blocking_ui(mut self, bundle_path: Option<String>) -> RemoteUiConfig {
-        self.bundle_path = bundle_path;
+    pub fn set_custom_blocking_ui(mut self, custom_blocking_ui: Option<String>) -> RemoteUiConfig {
+        self.custom_blocking_ui = custom_blocking_ui;
         self
     }
 

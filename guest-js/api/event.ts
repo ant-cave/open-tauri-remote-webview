@@ -11,8 +11,13 @@ interface EventMessage<T> {
 
 type EventHandler<T> = (event: EventMessage<T>) => void;
 
-function isTauri(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+/** True when running inside the real Tauri WebView (not the browser shim). */
+function isRealTauri(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    "__TAURI_INTERNALS__" in window &&
+    !(window as unknown as Record<string, unknown>).__TAURI_REMOTE_UI_SHIM__
+  );
 }
 
 async function tauriListen<T>(event: string, handler: EventHandler<T>): Promise<() => void> {
@@ -24,7 +29,7 @@ export async function listen<T>(
   event: string,
   handler: EventHandler<T>,
 ): Promise<() => void> {
-  if (isTauri()) {
+  if (isRealTauri()) {
     return tauriListen<T>(event, handler);
   }
 
@@ -42,7 +47,7 @@ export async function once<T>(
   event: string,
   handler: EventHandler<T>,
 ): Promise<() => void> {
-  if (isTauri()) {
+  if (isRealTauri()) {
     return tauriOnce<T>(event, handler);
   }
 

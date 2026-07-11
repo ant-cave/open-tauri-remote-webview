@@ -27,7 +27,7 @@ Enhanced by [ant-cave](https://github.com/ant-cave).
 | `@tauri-apps/api/app` (getName, getVersion, …) | ✅ | ✅ via bridge |
 | `@tauri-apps/api/window` (title, size, …) | ✅ | ✅ via bridge |
 | `@tauri-apps/api/event` (listen, emit) | ✅ | ✅ via bridge |
-| Rust `emit` → browser | ✅ | ✅ via `EmitterExt` |
+| Rust `emit` / `emit_to` / `emit_str` / … → browser | ✅ | ✅ via `EmitterExt` (sync, drop-in) |
 | Custom security & origin control | ✅ | ✅ |
 
 ---
@@ -41,7 +41,7 @@ Migrating an existing Tauri app to use `open-tauri-remote-webview` requires only
 | Area | Before (native Tauri) | After (remote) |
 |---|---|---|
 | Rust plugin | — | Add `open-tauri-remote-webview` crate + `.plugin(open_tauri_remote_webview::init())` |
-| Rust `window.emit()` | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt` (same call) |
+| Rust `emit()` (AppHandle / WebviewWindow) | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt` (same call, sync) |
 | Rust start WS server | — | Add `app.start_remote_ui(RemoteUiConfig::default())` in `setup` |
 | Frontend install | — | `npm install open-tauri-remote-webview` |
 | Frontend import | `import "..." from "@tauri-apps/api"` | **No change** — add ONE line: `import "open-tauri-remote-webview/bridge-init"` at entry |
@@ -54,7 +54,7 @@ Migrating an existing Tauri app to use `open-tauri-remote-webview` requires only
 2. **Frontend:** `npm install open-tauri-remote-webview`, then add `import "open-tauri-remote-webview/bridge-init"` at the top of your entry file (before any `@tauri-apps/api` import).
 3. **Vite:** Add the `/remote_ui_ws` proxy if you use Vite dev server (see [Usage > Vite dev proxy](#4-vite-dev-proxy)).
 4. **Clean up:** Delete all `isTauri()` / `isRunningInTauri()` branches — the bridge transparently proxies IPC calls to WebSocket when running in a browser, and passes through to real Tauri IPC when in WebView.
-5. **Optional:** Replace `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` in your Rust code so events emitted from the backend also reach browser clients.
+5. **Recommended:** Replace `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` in your Rust code so events emitted from the backend also reach browser clients. The trait has identical signatures — just change the import and everything works.
 
 ### What stays the same
 
@@ -100,9 +100,11 @@ tauri::Builder::default()
     .expect("error running app");
 ```
 
-If you use `window.emit()` in Rust, replace `use tauri::Emitter` with
-`use open_tauri_remote_webview::EmitterExt` so events also get forwarded to
-browser clients.
+If you use `emit()` / `emit_to()` / `emit_str()` / etc. in Rust, replace
+`use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` so events
+also get forwarded to browser clients. `EmitterExt` is implemented for
+`AppHandle` and `WebviewWindow` with the same **synchronous** signatures as
+`tauri::Emitter` — it is a true drop-in replacement.
 
 ### 2. Frontend — zero-effort (recommended)
 
