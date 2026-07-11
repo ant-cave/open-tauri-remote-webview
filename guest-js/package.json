@@ -1,6 +1,6 @@
 {
   "name": "open-tauri-remote-webview",
-  "version": "0.14.0",
+  "version": "0.0.1",
   "private": true,
   "description": "Remote browser webview access for Tauri v2 apps",
   "type": "module",
