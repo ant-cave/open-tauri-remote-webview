@@ -3,9 +3,11 @@
 [![crates.io](https://img.shields.io/crates/v/open-tauri-remote-webview)](https://crates.io/crates/open-tauri-remote-webview)
 [![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
 
-**后端（Rust 库）：** `cargo add open-tauri-remote-webview`
+**后端（Rust 库）：** `cargo add open-tauri-remote-webview` **（在 `src-tauri/` 目录下运行）**
 
-**前端（JS）：** `npm install open-tauri-remote-webview`
+**前端（JS）：** `npm install open-tauri-remote-webview` **（在项目根目录运行）**
+
+> **English users see [English README](README.md)** — for complete documentation.
 
 ---
 

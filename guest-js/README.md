@@ -2,7 +2,9 @@
 
 [![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
 
-**Install:** `npm install open-tauri-remote-webview`
+**Install:** `npm install open-tauri-remote-webview` **（run in project root）**
+
+> **中文用户请查看 [中文文档](https://github.com/ant-cave/open-tauri-remote-webview/blob/master/README.zh.md)** — 包含完整的 Rust 后端和前端使用指引。
 
 ---
 
