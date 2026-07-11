@@ -38,24 +38,33 @@ repository = "https://github.com/ant-cave/open-tauri-remote-webview"
 name = "open_tauri_remote_webview"
 path = "src/lib.rs"
 
+[features]
+default = ["ws"]
+ws = ["hyper", "hyper-tungstenite", "hyper-util", "http-body-util", "futures"]
+
 [dependencies.chrono]
 version = "0.4"
 
 [dependencies.futures]
 version = "0.3"
+optional = true
 
 [dependencies.http-body-util]
 version = "0.1"
+optional = true
 
 [dependencies.hyper]
 version = "1"
 features = ["full"]
+optional = true
 
 [dependencies.hyper-tungstenite]
 version = "0.18"
+optional = true
 
 [dependencies.hyper-util]
 version = "0.1"
+optional = true
 
 [dependencies.mime_guess]
 version = "2"

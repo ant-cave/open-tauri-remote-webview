@@ -18,11 +18,11 @@ export function getWsLogs(): string[] {
   return wsLogs;
 }
 
-// 前端日志辅助函数 — 格式: [年月日][时分秒][函数/模块][文件:行数][级别] 具体信息
+// Frontend log helper — format: [YYYY-MM-DD][HH:MM:SS][module][ws.ts][level] message
 function wsLog(level: string, module: string, message: string) {
   const now = new Date();
-  const dateStr = `${now.getFullYear()}年${String(now.getMonth() + 1).padStart(2, "0")}月${String(now.getDate()).padStart(2, "0")}日`;
-  const timeStr = `${String(now.getHours()).padStart(2, "0")}时${String(now.getMinutes()).padStart(2, "0")}分${String(now.getSeconds()).padStart(2, "0")}秒`;
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const timeStr = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}:${String(now.getSeconds()).padStart(2, "0")}`;
   const logStr = `[${dateStr}][${timeStr}][${module}][ws.ts][${level}] ${message}`;
   wsLogs.push(logStr);
   if (wsLogs.length > MAX_LOGS) wsLogs.shift();

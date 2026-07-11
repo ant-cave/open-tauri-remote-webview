@@ -38,6 +38,9 @@ pub trait EmitterExt<R: Runtime> {
 /// Remote UI plugin. Uses a non-blocking `try_read()` so it never blocks the
 /// calling thread — if the lock is contended the WS forward is skipped (the
 /// native IPC emit is unaffected).
+///
+/// When `ws` feature is disabled, this is a no-op.
+#[cfg(feature = "ws")]
 fn forward_to_ws<M, R, P>(manager: &M, event: &str, payload: P)
 where
     M: Manager<R>,
@@ -51,6 +54,16 @@ where
             }
         }
     }
+}
+
+#[cfg(not(feature = "ws"))]
+fn forward_to_ws<M, R, P>(_manager: &M, _event: &str, _payload: P)
+where
+    M: Manager<R>,
+    R: Runtime,
+    P: Serialize + Clone,
+{
+    // no-op when ws feature is disabled
 }
 
 // ── AppHandle ──────────────────────────────────────────────────────────────

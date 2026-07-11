@@ -55,6 +55,7 @@ pub struct RemoteUiConfig {
     pub(crate) bundle_path: Option<String>,
     pub(crate) minimize_app: bool,
     pub(crate) enable_info_url: bool,
+    pub(crate) enable_log: bool,
     pub(crate) custom_blocking_ui: Option<String>,
     pub(crate) custom_disconnect_ui: Option<String>,
 }
@@ -67,6 +68,7 @@ impl Default for RemoteUiConfig {
             port: None,
             bundle_path: None,
             enable_info_url: true,
+            enable_log: true,
             minimize_app: false,
             custom_disconnect_ui: None,
             custom_blocking_ui: None,
@@ -89,6 +91,18 @@ impl RemoteUiConfig {
     /// Default info url path will be responded with 404
     pub fn disable_info_url(mut self) -> RemoteUiConfig {
         self.enable_info_url = false;
+        self
+    }
+
+    /// Enable log output (default: true)
+    pub fn enable_log(mut self) -> RemoteUiConfig {
+        self.enable_log = true;
+        self
+    }
+
+    /// Disable log output
+    pub fn disable_log(mut self) -> RemoteUiConfig {
+        self.enable_log = false;
         self
     }
 

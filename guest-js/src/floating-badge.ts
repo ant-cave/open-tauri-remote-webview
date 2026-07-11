@@ -229,18 +229,18 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
       : "orui-bad";
     const logs = stats.logs.slice(-20).join("\n");
     panel.innerHTML = `
-      <div class="orui-title">WebSocket 调试信息</div>
+      <div class="orui-title">Remote UI Debug Info</div>
       <table>
-        <tr><td>状态</td><td class="${statusClass}">${stats.status}</td></tr>
-        <tr><td>延迟</td><td>${stats.latency != null ? stats.latency + "ms" : "-"}</td></tr>
-        <tr><td>连接次数</td><td>${stats.connectCount ?? 0}</td></tr>
-        <tr><td>重连次数</td><td>${stats.reconnectCount ?? 0}</td></tr>
-        <tr><td>在线时长</td><td>${stats.uptime != null ? formatUptime(stats.uptime) : "-"}</td></tr>
-        <tr><td>WS 地址</td><td class="orui-url">${stats.url || "-"}</td></tr>
-        ${stats.lastError ? `<tr><td>最后错误</td><td class="orui-error">${stats.lastError}</td></tr>` : ""}
+        <tr><td>Status</td><td class="${statusClass}">${stats.status}</td></tr>
+        <tr><td>Latency</td><td>${stats.latency != null ? stats.latency + "ms" : "-"}</td></tr>
+        <tr><td>Connects</td><td>${stats.connectCount ?? 0}</td></tr>
+        <tr><td>Reconnects</td><td>${stats.reconnectCount ?? 0}</td></tr>
+        <tr><td>Uptime</td><td>${stats.uptime != null ? formatUptime(stats.uptime) : "-"}</td></tr>
+        <tr><td>WS URL</td><td class="orui-url">${stats.url || "-"}</td></tr>
+        ${stats.lastError ? `<tr><td>Last Error</td><td class="orui-error">${stats.lastError}</td></tr>` : ""}
       </table>
-      <div class="orui-log-title">日志 <button class="orui-copy-btn">复制</button></div>
-      <pre class="orui-log">${logs || "暂无日志"}</pre>`;
+      <div class="orui-log-title">Logs <button class="orui-copy-btn">Copy</button></div>
+      <pre class="orui-log">${logs || "(no logs)"}</pre>`;
     // Bind copy button
     const copyBtn = panel.querySelector(".orui-copy-btn");
     if (copyBtn) {

@@ -10,6 +10,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
   #[error(transparent)]
   Io(#[from] std::io::Error),
+  #[cfg(feature = "ws")]
   #[error("WebSocket send error: {0}")]
   WsSend(String),
   #[error("Plugin state not found")]
