@@ -10,10 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.get-version.outputs.version }}
+      is_prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
     steps:
       - uses: actions/checkout@v4
       - id: get-version
         run: echo "version=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+      - id: check-prerelease
+        run: |
+          VERSION="${{ steps.get-version.outputs.version }}"
+          # 版本号包含 "-"（如 0.0.5-alpha.0）-> prerelease，否则为 release
+          case "$VERSION" in
+            *-*) echo "is_prerelease=true" ;;
+            *)   echo "is_prerelease=false" ;;
+          esac >> $GITHUB_OUTPUT
       - name: Check Cargo.toml version
         run: |
           V=$(grep -m1 '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
@@ -50,6 +59,11 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org/
       - run: npm ci
-      - run: npm publish
+      - run: |
+          if [ "${{ needs.validate.outputs.is_prerelease }}" = "true" ]; then
+            npm publish --tag next
+          else
+            npm publish
+          fi
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
