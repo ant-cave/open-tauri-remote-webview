@@ -92,14 +92,27 @@ async fn trigger_event(app: tauri::AppHandle, name: String, payload: String) {
 
 // ── Original Commands ────────────────────────────────────
 
+fn notes_path() -> std::path::PathBuf {
+    let mut p = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    p.pop();
+    p.pop();
+    p.pop();
+    p.push("test/data/notes.txt");
+    p
+}
+
 #[tauri::command]
 fn read_notes() -> Result<String, String> {
-    fs::read_to_string("/root/test.txt").map_err(|e| e.to_string())
+    fs::read_to_string(notes_path()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn write_notes(content: String) -> Result<(), String> {
-    fs::write("/root/test.txt", &content).map_err(|e| e.to_string())
+    let path = notes_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    fs::write(path, &content).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

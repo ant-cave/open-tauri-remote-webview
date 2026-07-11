@@ -276,6 +276,7 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
     badge.classList.remove("orui-bottom-right", "orui-bottom-left", "orui-top-right", "orui-top-left");
     badge.style.left = (e.clientX - drag.offsetX) + "px";
     badge.style.top = (e.clientY - drag.offsetY) + "px";
+    if (showDebug) positionPanel();
   }
 
   function onPointerUp(e: PointerEvent) {

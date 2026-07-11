@@ -230,8 +230,16 @@ cargo build
 # 编译 JS
 cd guest-js && npm run build
 
-# 测试应用（有窗口 + devtools）
-cd test/vue-app && npm run tauri dev
+# 一键编译 → 重新安装 → 启动测试（默认监视 guest-js 文件变化，自动重建）
+cargo xtask dev
+
+# 分步执行：
+# 1) 编译 JS
+cd guest-js && npm run build
+# 2) 在 test 项目中重新安装本地包
+cd test/vue-app && pnpm remove open-tauri-remote-webview && pnpm install open-tauri-remote-webview@file:../../guest-js
+# 3) 启动测试应用（有窗口 + devtools）
+cd test/vue-app && pnpm tauri dev
 
 # 测试应用（无头模式，只跑 WS 无窗口）
 cd test/vue-app && npm run rdev

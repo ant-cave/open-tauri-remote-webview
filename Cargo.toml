@@ -22,6 +22,7 @@ exclude = [
     "/dist-js",
     "/guest-js",
     "/node_modules",
+    "/xtask",
 ]
 autolib = false
 autobins = false

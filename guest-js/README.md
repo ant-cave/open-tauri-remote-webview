@@ -218,14 +218,22 @@ window.__TAURI_INTERNALS__.invoke(cmd, args)
 ## Plugin Development
 
 ```bash
-# Build Rust
+# Build Rust (crate)
 cargo build
 
-# Build JS
+# Build JS (this package)
 cd guest-js && npm run build
 
-# Test app (with window + devtools)
-cd test/vue-app && npm run tauri dev
+# One shot: build JS → reinstall → launch test app (auto-watches guest-js for changes)
+cargo xtask dev
+
+# Step by step:
+# 1) Build JS
+cd guest-js && npm run build
+# 2) Reinstall the local package in the test app
+cd test/vue-app && pnpm remove open-tauri-remote-webview && pnpm install open-tauri-remote-webview@file:../../guest-js
+# 3) Launch test app (with window + devtools)
+cd test/vue-app && pnpm tauri dev
 
 # Test app (headless, WS only — no window)
 cd test/vue-app && npm run rdev
