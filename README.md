@@ -1,5 +1,14 @@
 # Open Tauri Remote WebView
 
+[![crates.io](https://img.shields.io/crates/v/open-tauri-remote-webview)](https://crates.io/crates/open-tauri-remote-webview)
+[![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
+
+**Backend (Rust library):** `cargo add open-tauri-remote-webview`
+
+**Frontend (JS):** `npm install open-tauri-remote-webview`
+
+---
+
 ## Why this plugin?
 
 Building a Tauri app? Some things are **simply impossible** with native Tauri alone:

@@ -1,5 +1,14 @@
 # Open Tauri Remote WebView
 
+[![crates.io](https://img.shields.io/crates/v/open-tauri-remote-webview)](https://crates.io/crates/open-tauri-remote-webview)
+[![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
+
+**后端（Rust 库）：** `cargo add open-tauri-remote-webview`
+
+**前端（JS）：** `npm install open-tauri-remote-webview`
+
+---
+
 ## 为什么需要它？
 
 开发 Tauri 应用时，有些事是原生 Tauri **做不到**的：

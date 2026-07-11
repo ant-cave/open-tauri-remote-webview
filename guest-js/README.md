@@ -1,5 +1,11 @@
 # Open Tauri Remote WebView
 
+[![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
+
+**Install:** `npm install open-tauri-remote-webview`
+
+---
+
 ## Why this plugin?
 
 Building a Tauri app? Some things are **simply impossible** with native Tauri alone:
