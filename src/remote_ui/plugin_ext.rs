@@ -46,10 +46,20 @@ impl RemoteUi {
         let ws_payload: WsPayload = serde_json::from_str(&payload)?;
         log_info!("invoke_rpc", format!("收到 RPC 调用请求: cmd={}, id={}, args={:?}",
             ws_payload.cmd, ws_payload.id, ws_payload.args));
-        let window = self
-            .app
-            .get_webview_window("main")
-            .ok_or(Error::AssetNotFound("WebviewWindow Not Found".to_owned()))?;
+        let window = match self.app.get_webview_window("main") {
+            Some(w) => w,
+            None => {
+                log_warn!("invoke_rpc", "没有 main 窗口 (headless 模式)，返回错误响应给前端");
+                let err_msg = json!({"id":ws_payload.id,"payload":"{\"error\":\"WebviewWindow Not Found (headless mode)\"}"}).to_string();
+                let session_clone = session.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = session_clone.lock().await.send(Message::text(err_msg)).await {
+                        log_error!("invoke_rpc", format!("发送错误响应失败: {:?}", e));
+                    }
+                });
+                return Ok(());
+            }
+        };
         let req_unique_id = format!("remote-ui::result::{}", &ws_payload.id);
         log_info!("invoke_rpc", format!("注册一次性事件监听: event_id={}", req_unique_id));
         self.app

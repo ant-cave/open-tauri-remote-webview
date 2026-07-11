@@ -13,6 +13,14 @@ import { installTauriBridge } from "./tauri-internals.js";
 import { initFloatingBadge } from "./floating-badge.js";
 import wsClient from "./ws.js";
 
+// Allow global URL override before import
+if (typeof window !== "undefined") {
+  const override = (window as unknown as Record<string, unknown>).__ORUI_WS_URL__;
+  if (typeof override === "string") {
+    wsClient.setUrl(override);
+  }
+}
+
 installTauriBridge();
 
 // Pre-connect WebSocket so first invoke/listen is faster (noop if already open)

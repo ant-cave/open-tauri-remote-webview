@@ -60,9 +60,9 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   const panel = document.createElement("div");
   panel.className = "orui-panel";
   panel.style.display = "none";
-  badge.append(panel);
 
   document.body.append(badge);
+  document.body.append(panel);
 
   // ---- inject styles ----
   const styleId = "orui-badge-style";
@@ -73,11 +73,13 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
 .orui-badge {
   position: fixed;
   z-index: 99999;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 3px 10px;
-  border-radius: 10px;
+  width: 100px;
+  height: 24px;
+  border-radius: 12px;
   font-size: 11px;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: rgba(246,248,250,0.92);
@@ -123,10 +125,14 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   pointer-events: none;
   font-size: 10px;
   color: #24292f;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 72px;
 }
 
 .orui-panel {
-  position: absolute;
+  position: fixed;
   min-width: 250px;
   background: rgba(255,255,255,0.98);
   border: 1px solid #d0d7de;
@@ -140,14 +146,6 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   color: #24292f;
   backdrop-filter: blur(8px);
 }
-.orui-bottom-right .orui-panel,
-.orui-bottom-left .orui-panel { bottom: calc(100% + 6px); }
-.orui-top-right .orui-panel,
-.orui-top-left .orui-panel { top: calc(100% + 6px); }
-.orui-bottom-right .orui-panel,
-.orui-top-right .orui-panel { right: 0; }
-.orui-bottom-left .orui-panel,
-.orui-top-left .orui-panel { left: 0; }
 
 .orui-panel .orui-title {
   font-weight: 700;
@@ -167,6 +165,10 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
 .orui-panel .orui-ok { color: #2da44e; font-weight: 600; }
 .orui-panel .orui-warn { color: #d4920b; font-weight: 600; }
 .orui-panel .orui-bad { color: #cf222e; font-weight: 600; }
+.orui-log-title { font-weight: 700; margin-top: 6px; padding-top: 4px; border-top: 1px solid #d0d7de; margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+.orui-copy-btn { font-size: 10px; padding: 1px 6px; border: 1px solid #d0d7de; border-radius: 4px; background: #f6f8fa; cursor: pointer; color: #24292f; font-family: inherit; }
+.orui-copy-btn:hover { background: #e1e4e8; }
+.orui-log { font-size: 10px; line-height: 1.4; max-height: 150px; overflow-y: auto; background: #f6f8fa; padding: 4px 6px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; color: #24292f; font-family: "JetBrains Mono", "Fira Code", monospace; }
 `;
     document.head.append(style);
   }
@@ -179,14 +181,53 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   renderStatus(wsClient.getStatus());
   wsClient.onStatusChange(renderStatus);
 
+  function positionPanel() {
+    if (!showDebug) { panel.style.display = "none"; return; }
+    panel.style.left = "";
+    panel.style.top = "";
+    panel.style.display = "block";
+    const br = badge.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    const gap = 6;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Score each side by available space, pick the one that fits best
+    const sides: { score: number; top: number; left: number }[] = [];
+    // above
+    if (br.top - gap >= pr.height) {
+      sides.push({ score: br.top, top: br.top - gap - pr.height, left: br.left + br.width / 2 - pr.width / 2 });
+    }
+    // below
+    if (vh - br.bottom - gap >= pr.height) {
+      sides.push({ score: vh - br.bottom, top: br.bottom + gap, left: br.left + br.width / 2 - pr.width / 2 });
+    }
+    // right
+    if (vw - br.right - gap >= pr.width) {
+      sides.push({ score: vw - br.right, top: br.top + br.height / 2 - pr.height / 2, left: br.right + gap });
+    }
+    // left
+    if (br.left - gap >= pr.width) {
+      sides.push({ score: br.left, top: br.top + br.height / 2 - pr.height / 2, left: br.left - gap - pr.width });
+    }
+    if (sides.length > 0) {
+      const best = sides.reduce((a, b) => a.score >= b.score ? a : b);
+      panel.style.left = Math.max(gap, Math.min(vw - pr.width - gap, best.left)) + "px";
+      panel.style.top = Math.max(gap, Math.min(vh - pr.height - gap, best.top)) + "px";
+    } else {
+      // If no side fits, center in viewport
+      panel.style.left = Math.max(gap, (vw - pr.width) / 2) + "px";
+      panel.style.top = Math.max(gap, (vh - pr.height) / 2) + "px";
+    }
+  }
+
   function renderPanel() {
     if (!showDebug) { panel.style.display = "none"; return; }
-    panel.style.display = "block";
     const stats = wsClient.getStats();
     const statusClass =
       stats.status === "connected" ? "orui-ok"
       : stats.status === "connecting" ? "orui-warn"
       : "orui-bad";
+    const logs = stats.logs.slice(-20).join("\n");
     panel.innerHTML = `
       <div class="orui-title">WebSocket 调试信息</div>
       <table>
@@ -197,7 +238,19 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
         <tr><td>在线时长</td><td>${stats.uptime != null ? formatUptime(stats.uptime) : "-"}</td></tr>
         <tr><td>WS 地址</td><td class="orui-url">${stats.url || "-"}</td></tr>
         ${stats.lastError ? `<tr><td>最后错误</td><td class="orui-error">${stats.lastError}</td></tr>` : ""}
-      </table>`;
+      </table>
+      <div class="orui-log-title">日志 <button class="orui-copy-btn">复制</button></div>
+      <pre class="orui-log">${logs || "暂无日志"}</pre>`;
+    // Bind copy button
+    const copyBtn = panel.querySelector(".orui-copy-btn");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const fullLogs = wsClient.getStats().logs.join("\n");
+        navigator.clipboard.writeText(fullLogs).catch(() => {});
+      });
+    }
+    positionPanel();
   }
 
   // ---- drag ----
