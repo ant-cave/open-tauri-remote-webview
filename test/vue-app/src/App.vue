@@ -37,6 +37,7 @@ const categories = [
   { id: "complex", label: "复杂类型", open: false },
   { id: "error", label: "错误处理", open: false },
   { id: "events", label: "事件", open: false },
+  { id: "rust-events", label: "Rust 端事件触发", open: false },
   { id: "app", label: "应用信息", open: false },
   { id: "window", label: "窗口信息", open: false },
   { id: "counter", label: "计数器", open: false },
@@ -125,6 +126,196 @@ async function testOnce() {
   setTimeout(() => unlisten(), 500);
 }
 
+async function testListenUnlisten() {
+  const eventName = `unlisten-test-${Date.now()}`;
+  let receivedCount = 0;
+  const unlisten = await listen<string>(eventName, () => {
+    receivedCount++;
+  });
+  await invoke("trigger_event", { name: eventName, payload: "before unlisten" });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+  await invoke("trigger_event", { name: eventName, payload: "after unlisten" });
+  await new Promise((r) => setTimeout(r, 100));
+  add("events", `unlisten 测试: 取消监听后收到 ${receivedCount} 次 (应为 1)`);
+}
+
+async function testMultipleListeners() {
+  const eventName = `multi-listener-${Date.now()}`;
+  let count1 = 0;
+  let count2 = 0;
+  const unlisten1 = await listen<string>(eventName, () => { count1++; });
+  const unlisten2 = await listen<string>(eventName, () => { count2++; });
+  await invoke("trigger_event", { name: eventName, payload: "broadcast" });
+  await new Promise((r) => setTimeout(r, 100));
+  add("events", `多监听器: listener1=${count1}, listener2=${count2} (均应为 1)`);
+  unlisten1();
+  unlisten2();
+}
+
+async function testStringPayload() {
+  const eventName = `payload-str-${Date.now()}`;
+  const unlisten = await listen<string>(eventName, (e) => {
+    add("events", `string payload: "${e.payload}" (type=${typeof e.payload})`);
+  });
+  await invoke("emit_event_with_string", { name: eventName, payload: "hello string" });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testNumberPayload() {
+  const eventName = `payload-num-${Date.now()}`;
+  const unlisten = await listen<number>(eventName, (e) => {
+    add("events", `number payload: ${e.payload} (type=${typeof e.payload})`);
+  });
+  await invoke("emit_event_with_number", { name: eventName, payload: 3.14 });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testObjectPayload() {
+  const eventName = `payload-obj-${Date.now()}`;
+  const unlisten = await listen<Record<string, unknown>>(eventName, (e) => {
+    add("events", `object payload: ${JSON.stringify(e.payload)}`);
+  });
+  await invoke("emit_event_with_object", { name: eventName, payload: { key: "value", num: 42 } });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testArrayPayload() {
+  const eventName = `payload-arr-${Date.now()}`;
+  const unlisten = await listen<unknown[]>(eventName, (e) => {
+    add("events", `array payload: ${JSON.stringify(e.payload)} (length=${(e.payload as unknown[]).length})`);
+  });
+  await invoke("emit_event_with_array", { name: eventName, payload: [1, "two", true, null] });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testNullPayload() {
+  const eventName = `payload-null-${Date.now()}`;
+  const unlisten = await listen<null>(eventName, (e) => {
+    add("events", `null payload: ${JSON.stringify(e.payload)}`);
+  });
+  await invoke("emit_simple_event", { name: eventName });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+// ── 4b. Rust-side Event Trigger Tests ───────────────────
+async function testRustEmitSimple() {
+  const eventName = `rust-simple-${Date.now()}`;
+  const unlisten = await listen(eventName, (e) => {
+    add("rust-events", `简单事件: ${JSON.stringify(e.payload)}`);
+  });
+  await invoke("emit_simple_event", { name: eventName });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitString() {
+  const eventName = `rust-str-${Date.now()}`;
+  const unlisten = await listen<string>(eventName, (e) => {
+    add("rust-events", `字符串事件: "${e.payload}"`);
+  });
+  await invoke("emit_event_with_string", { name: eventName, payload: "来自 Rust 的问候" });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitNumber() {
+  const eventName = `rust-num-${Date.now()}`;
+  const unlisten = await listen<number>(eventName, (e) => {
+    add("rust-events", `数字事件: ${e.payload}`);
+  });
+  await invoke("emit_event_with_number", { name: eventName, payload: 42.5 });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitBool() {
+  const eventName = `rust-bool-${Date.now()}`;
+  const unlisten = await listen<boolean>(eventName, (e) => {
+    add("rust-events", `布尔事件: ${e.payload}`);
+  });
+  await invoke("emit_event_with_bool", { name: eventName, payload: true });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitObject() {
+  const eventName = `rust-obj-${Date.now()}`;
+  const unlisten = await listen<Record<string, unknown>>(eventName, (e) => {
+    add("rust-events", `对象事件: ${JSON.stringify(e.payload)}`);
+  });
+  await invoke("emit_event_with_object", { name: eventName, payload: { user: "test", score: 100 } });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitArray() {
+  const eventName = `rust-arr-${Date.now()}`;
+  const unlisten = await listen<unknown[]>(eventName, (e) => {
+    add("rust-events", `数组事件: ${JSON.stringify(e.payload)}`);
+  });
+  await invoke("emit_event_with_array", { name: eventName, payload: ["a", "b", "c"] });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitNested() {
+  const eventName = `rust-nested-${Date.now()}`;
+  const unlisten = await listen<Record<string, unknown>>(eventName, (e) => {
+    add("rust-events", `嵌套事件: ${JSON.stringify(e.payload)}`);
+  });
+  await invoke("emit_event_with_nested", {
+    name: eventName,
+    payload: { level1: { level2: { level3: "deep" } }, arr: [1, 2, 3] },
+  });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitToWindow() {
+  const eventName = `rust-to-window-${Date.now()}`;
+  const unlisten = await listen<string>(eventName, (e) => {
+    add("rust-events", `定向到 main 窗口: "${e.payload}"`);
+  });
+  await invoke("emit_to_specific_window", {
+    windowLabel: "main",
+    name: eventName,
+    payload: "targeted message",
+  });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitToAll() {
+  const eventName = `rust-to-all-${Date.now()}`;
+  const unlisten = await listen<string>(eventName, (e) => {
+    add("rust-events", `广播到所有窗口: "${e.payload}"`);
+  });
+  await invoke("emit_to_all_windows", { name: eventName, payload: "broadcast message" });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
+async function testRustEmitMultiple() {
+  const events: [string, string][] = [];
+  const received: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const name = `rust-multi-${i}-${Date.now()}`;
+    events.push([name, `msg-${i}`]);
+    await listen<string>(name, (e) => {
+      received.push(e.payload as string);
+    });
+  }
+  await invoke("emit_multiple_events", { events });
+  await new Promise((r) => setTimeout(r, 200));
+  add("rust-events", `批量事件: 收到 ${received.length}/3 (${received.join(", ")})`);
+}
+
 // ── 5. App Info ─────────────────────────────────────────
 async function testAppInfo() {
   add("app", "请求应用信息...");
@@ -178,6 +369,9 @@ async function testReadNotes() {
 
 // ── 9. Remote Server ────────────────────────────────────
 async function testStartServer() {
+  // 先停止已运行的服务器
+  await invoke("disable_server");
+  await new Promise((r) => setTimeout(r, 500));
   await invoke("enable_server", { port: port.value });
   serverRunning.value = true;
   add("server", `服务器已启动 ws://0.0.0.0:${port.value}/remote_ui_ws`);
@@ -188,6 +382,44 @@ async function testStopServer() {
   await invoke("disable_server");
   serverRunning.value = false;
   add("server", "服务器已停止");
+}
+
+async function testRestartServer() {
+  await invoke("disable_server");
+  await new Promise((r) => setTimeout(r, 500));
+  await invoke("enable_server", { port: port.value });
+  serverRunning.value = true;
+  add("server", `服务器已重启 (端口 ${port.value})`);
+}
+
+async function testServerStatus() {
+  const running = await invoke<boolean>("is_server_running");
+  add("server", `服务器状态: ${running ? "运行中" : "已停止"}`);
+}
+
+async function testCustomPort() {
+  const customPort = port.value + 1;
+  await invoke("disable_server");
+  await new Promise((r) => setTimeout(r, 500));
+  await invoke("start_server_with_config", {
+    port: customPort,
+    enableLog: true,
+    origin: "localhost",
+  });
+  serverRunning.value = true;
+  add("server", `服务器已使用自定义端口 ${customPort} 启动`);
+}
+
+async function testRandomPort() {
+  await invoke("disable_server");
+  await new Promise((r) => setTimeout(r, 500));
+  await invoke("start_server_with_config", {
+    port: null,
+    enableLog: true,
+    origin: "localhost",
+  });
+  serverRunning.value = true;
+  add("server", "服务器已使用随机端口启动");
 }
 
 // ── Test runner ───────────────────────────────────────
@@ -229,6 +461,25 @@ async function runCategory(id: CatId) {
     case "events":
       await runTestFn(id, "emit_and_listen", testEmitAndListen);
       await runTestFn(id, "once", testOnce);
+      await runTestFn(id, "listen_unlisten", testListenUnlisten);
+      await runTestFn(id, "multiple_listeners", testMultipleListeners);
+      await runTestFn(id, "string_payload", testStringPayload);
+      await runTestFn(id, "number_payload", testNumberPayload);
+      await runTestFn(id, "object_payload", testObjectPayload);
+      await runTestFn(id, "array_payload", testArrayPayload);
+      await runTestFn(id, "null_payload", testNullPayload);
+      break;
+    case "rust-events":
+      await runTestFn(id, "emit_simple", testRustEmitSimple);
+      await runTestFn(id, "emit_string", testRustEmitString);
+      await runTestFn(id, "emit_number", testRustEmitNumber);
+      await runTestFn(id, "emit_bool", testRustEmitBool);
+      await runTestFn(id, "emit_object", testRustEmitObject);
+      await runTestFn(id, "emit_array", testRustEmitArray);
+      await runTestFn(id, "emit_nested", testRustEmitNested);
+      await runTestFn(id, "emit_to_window", testRustEmitToWindow);
+      await runTestFn(id, "emit_to_all", testRustEmitToAll);
+      await runTestFn(id, "emit_multiple", testRustEmitMultiple);
       break;
     case "app":
       await runTestFn(id, "app_info", testAppInfo);
@@ -244,11 +495,12 @@ async function runCategory(id: CatId) {
       await runTestFn(id, "read_notes", testReadNotes);
       break;
     case "server":
-      if (serverRunning.value) {
-        await runTestFn(id, "stop_server", testStopServer);
-      } else {
-        await runTestFn(id, "start_server", testStartServer);
-      }
+      await runTestFn(id, "server_status", testServerStatus);
+      await runTestFn(id, "start_server", testStartServer);
+      await runTestFn(id, "restart_server", testRestartServer);
+      await runTestFn(id, "custom_port", testCustomPort);
+      await runTestFn(id, "random_port", testRandomPort);
+      await runTestFn(id, "stop_server", testStopServer);
       break;
   }
   const r = results.value[id]!;
@@ -304,6 +556,10 @@ onMounted(async () => {
     <section class="controls">
       <button class="btn btn-primary" @click="runAll">▶ 运行所有测试</button>
       <button class="btn" @click="log = []">清空日志</button>
+      <div class="port-config">
+        <label>端口:</label>
+        <input type="number" v-model="port" min="1" max="65535" class="port-input" />
+      </div>
     </section>
 
     <section class="categories">
@@ -316,12 +572,13 @@ onMounted(async () => {
             <template v-if="cat.id === 'basic'">echo_string, add_numbers, to_bool, echo_json</template>
             <template v-else-if="cat.id === 'complex'">get_user (结构体), get_paginated (泛型)</template>
             <template v-else-if="cat.id === 'error'">always_fails, divide (正常 + 除零)</template>
-            <template v-else-if="cat.id === 'events'">listen, once, trigger_event</template>
+            <template v-else-if="cat.id === 'events'">listen, once, trigger_event, 载荷类型测试</template>
+            <template v-else-if="cat.id === 'rust-events'">Rust 端主动发射事件，多种载荷类型</template>
             <template v-else-if="cat.id === 'app'">getName, getVersion, getTauriVersion</template>
             <template v-else-if="cat.id === 'window'">title, size, position, theme 等</template>
             <template v-else-if="cat.id === 'counter'">通过 invoke 的原子计数器</template>
             <template v-else-if="cat.id === 'notes'">读写文件系统</template>
-            <template v-else-if="cat.id === 'server'">启动/停止 WS 远程访问服务器</template>
+            <template v-else-if="cat.id === 'server'">启动/停止/重启，自定义端口，随机端口</template>
           </p>
           <p v-if="results[cat.id]" class="cat-result" :class="results[cat.id].failed > 0 ? 'result-fail' : 'result-pass'">
             ✅ {{ results[cat.id].passed }}/{{ results[cat.id].total }} 通过
@@ -351,12 +608,16 @@ header h1 { font-size: 22px; margin-bottom: 8px; }
 .badge-on { background: #238636; color: #fff; }
 .badge-off { background: #da3633; color: #fff; }
 
-.controls { margin-bottom: 16px; display: flex; gap: 8px; }
+.controls { margin-bottom: 16px; display: flex; gap: 8px; align-items: center; }
 .btn { padding: 6px 14px; border: 1px solid #30363d; border-radius: 6px; background: #21262d; color: #c9d1d9; cursor: pointer; font-size: 13px; }
 .btn:hover { background: #30363d; }
 .btn-primary { background: #238636; border-color: #2ea043; }
 .btn-primary:hover { background: #2ea043; }
 .btn-sm { padding: 3px 10px; font-size: 12px; }
+.port-config { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.port-config label { font-size: 13px; color: #8b949e; }
+.port-input { width: 80px; padding: 4px 8px; border: 1px solid #30363d; border-radius: 4px; background: #0d1117; color: #c9d1d9; font-size: 13px; }
+.port-input:focus { outline: none; border-color: #1f6feb; }
 
 .categories { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; margin-bottom: 20px; }
 .cat-card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px; }

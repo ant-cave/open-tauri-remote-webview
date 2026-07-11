@@ -45,6 +45,7 @@ let _connIdCounter = 0;
 class WsClient {
   private ws: WebSocket | null = null;
   private url: string | null = null;
+  private port: number | null = null;
   private handlers: Set<MessageHandler> = new Set();
   private statusCallbacks: Set<StatusCallback> = new Set();
   private sendQueue: string[] = [];
@@ -111,8 +112,22 @@ class WsClient {
   setUrl(url: string) {
     wsLog("INFO", "WsClient.setUrl", `设置 WebSocket URL: ${url}`);
     this.url = url;
+    // URL 优先级高于 port；设置 URL 时清空 port
+    this.port = null;
     // URL 变了，之前的连接请求是针对旧地址的，取消等待
     this._connecting = false;
+  }
+
+  setPort(port: number) {
+    wsLog("INFO", "WsClient.setPort", `设置 WebSocket 端口: ${port}`);
+    this.port = port;
+    // port 设置后需要重新构造 URL；如果已有 url 则清除（url 优先级更高）
+    this.url = null;
+    this._connecting = false;
+  }
+
+  getPort(): number | null {
+    return this.port;
   }
 
   private scheduleReconnect() {
@@ -142,6 +157,14 @@ class WsClient {
     }
     const loc = window.location;
     const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+    // 如果设置了端口，使用预设端口构造 URL
+    if (this.port) {
+      const hostname = loc.hostname || "localhost";
+      const url = `${proto}//${hostname}:${this.port}/remote_ui_ws`;
+      wsLog("DEBUG", "WsClient.detectUrl", `使用预设端口构造 WebSocket URL: ${url}`);
+      return url;
+    }
+    // 否则使用当前页面的 host（包含端口）
     const url = `${proto}//${loc.host}/remote_ui_ws`;
     wsLog("DEBUG", "WsClient.detectUrl", `自动检测 WebSocket URL: ${url}`);
     return url;

@@ -13,27 +13,34 @@ import { installTauriBridge } from "./tauri-internals.js";
 import { initFloatingBadge } from "./floating-badge.js";
 import wsClient from "./ws.js";
 
-// Allow global URL override before import
-if (typeof window !== "undefined") {
-  const override = (window as unknown as Record<string, unknown>).__ORUI_WS_URL__;
-  if (typeof override === "string") {
-    wsClient.setUrl(override);
-  }
-}
-
-installTauriBridge();
-
-// Pre-connect WebSocket so first invoke/listen is faster (noop if already open)
-// If URL is not set yet (custom port), first connect will fail gracefully
-wsClient.connect().catch(() => {});
-
-// Show WS connection status badge by default (only in remote browser, not in native Tauri webview)
-// Set window.__ORUI_DISABLE_BADGE__ = true before importing bridge-init to suppress it
+// Detect native Tauri BEFORE any shim installation.
+// In a real Tauri WebView, __TAURI_INTERNALS__ is injected by the runtime itself,
+// so IPC works natively and no WS bridge is needed.
 const isNativeTauri =
   typeof window !== "undefined" &&
   (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ &&
   !(window as unknown as Record<string, unknown>).__TAURI_REMOTE_UI_SHIM__;
 
+if (!isNativeTauri) {
+  // Only configure and connect WS when running in a remote browser (not native Tauri)
+  const urlOverride = (window as unknown as Record<string, unknown>).__ORUI_WS_URL__;
+  const portOverride = (window as unknown as Record<string, unknown>).__ORUI_WS_PORT__;
+
+  // URL priority is higher than port; if URL is set, ignore port
+  if (typeof urlOverride === "string") {
+    wsClient.setUrl(urlOverride);
+  } else if (typeof portOverride === "number") {
+    wsClient.setPort(portOverride);
+  }
+
+  // Pre-connect WebSocket so first invoke/listen is faster
+  wsClient.connect().catch(() => {});
+}
+
+// Install the shim (no-op if __TAURI_INTERNALS__ already exists, i.e. native Tauri)
+installTauriBridge();
+
+// Show WS connection status badge only in remote browser
 if (!isNativeTauri && !(window as unknown as Record<string, unknown>).__ORUI_DISABLE_BADGE__) {
   initFloatingBadge();
 }

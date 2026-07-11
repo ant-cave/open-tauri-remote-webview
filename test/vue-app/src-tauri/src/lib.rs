@@ -1,11 +1,11 @@
 use std::sync::atomic::{AtomicI32, Ordering};
-use tauri::Emitter;
 use serde::Serialize;
 use std::fs;
 
 use open_tauri_remote_webview::{
     RemoteUiConfig, RemoteUiExt,
 };
+use tauri::Emitter;
 
 static COUNTER: AtomicI32 = AtomicI32::new(0);
 
@@ -45,9 +45,9 @@ struct User {
 fn get_user(id: u32) -> User {
     User {
         id,
-        name: "小明".into(),
+        name: "Xiao Ming".into(),
         email: "xiaoming@example.com".into(),
-        roles: vec!["管理员".into(), "用户".into()],
+        roles: vec!["admin".into(), "user".into()],
     }
 }
 
@@ -88,6 +88,95 @@ fn divide(a: i32, b: i32) -> Result<i32, String> {
 #[tauri::command]
 async fn trigger_event(app: tauri::AppHandle, name: String, payload: String) {
     let _ = app.emit(&name, &payload);
+}
+
+/// Emit an event to a specific window label (tests emit_to)
+#[tauri::command]
+async fn emit_to_window(app: tauri::AppHandle, target: String, event: String, payload: String) {
+    use tauri::EventTarget;
+    let _ = app.emit_to(EventTarget::window(&target), &event, &payload);
+}
+
+/// Emit a raw string event (tests em_str pattern)
+#[tauri::command]
+async fn emit_str_event(app: tauri::AppHandle, name: String, payload: String) {
+    let _ = app.emit(&name, &payload);
+}
+
+// ── Rust-side Event Trigger Tests ───────────────────────
+
+/// Emit a simple event with no payload
+#[tauri::command]
+async fn emit_simple_event(app: tauri::AppHandle, name: String) {
+    let _ = app.emit(&name, serde_json::Value::Null);
+}
+
+/// Emit an event with a string payload
+#[tauri::command]
+async fn emit_event_with_string(app: tauri::AppHandle, name: String, payload: String) {
+    let _ = app.emit(&name, &payload);
+}
+
+/// Emit an event with a numeric payload
+#[tauri::command]
+async fn emit_event_with_number(app: tauri::AppHandle, name: String, payload: f64) {
+    let _ = app.emit(&name, payload);
+}
+
+/// Emit an event with a boolean payload
+#[tauri::command]
+async fn emit_event_with_bool(app: tauri::AppHandle, name: String, payload: bool) {
+    let _ = app.emit(&name, payload);
+}
+
+/// Emit an event with a JSON object payload
+#[tauri::command]
+async fn emit_event_with_object(app: tauri::AppHandle, name: String, payload: serde_json::Value) {
+    let _ = app.emit(&name, payload);
+}
+
+/// Emit an event with an array payload
+#[tauri::command]
+async fn emit_event_with_array(app: tauri::AppHandle, name: String, payload: Vec<serde_json::Value>) {
+    let _ = app.emit(&name, payload);
+}
+
+/// Emit an event with a nested structure payload
+#[tauri::command]
+async fn emit_event_with_nested(app: tauri::AppHandle, name: String, payload: serde_json::Value) {
+    let _ = app.emit(&name, payload);
+}
+
+/// Emit an event to a specific window
+#[tauri::command]
+async fn emit_to_specific_window(
+    app: tauri::AppHandle,
+    window_label: String,
+    name: String,
+    payload: String,
+) {
+    use tauri::EventTarget;
+    let _ = app.emit_to(EventTarget::window(&window_label), &name, &payload);
+}
+
+/// Emit an event to all windows
+#[tauri::command]
+async fn emit_to_all_windows(app: tauri::AppHandle, name: String, payload: String) {
+    let _ = app.emit(&name, &payload);
+}
+
+/// Emit multiple events sequentially
+#[tauri::command]
+async fn emit_multiple_events(app: tauri::AppHandle, events: Vec<(String, String)>) {
+    for (name, payload) in events {
+        let _ = app.emit(&name, &payload);
+    }
+}
+
+/// Return server running status
+#[tauri::command]
+async fn is_server_running(app: tauri::AppHandle) -> bool {
+    app.is_remote_ui_running().await
 }
 
 // ── Original Commands ────────────────────────────────────
@@ -140,6 +229,67 @@ async fn disable_server(app: tauri::AppHandle) -> Result<String, String> {
     Ok("Server stopped".to_string())
 }
 
+/// Test double-start error branch
+#[tauri::command]
+async fn restart_server(app: tauri::AppHandle, port: u16) -> Result<String, String> {
+    app.start_remote_ui(
+        RemoteUiConfig::default()
+            .set_port(Some(port))
+            .set_allowed_origin(open_tauri_remote_webview::OriginType::Localhost),
+    )
+    .await
+    .map_err(|e| e.to_string())?;
+    Ok(format!("Server restarted on port {}", port))
+}
+
+/// Re-start server with log enabled/disabled config
+#[tauri::command]
+async fn toggle_server_log(app: tauri::AppHandle, port: u16, enable: bool) -> Result<String, String> {
+    let mut cfg = RemoteUiConfig::default()
+        .set_port(Some(port))
+        .set_allowed_origin(open_tauri_remote_webview::OriginType::Localhost);
+    if enable {
+        cfg = cfg.enable_log();
+    } else {
+        cfg = cfg.disable_log();
+    }
+    app.start_remote_ui(cfg).await.map_err(|e| e.to_string())?;
+    Ok(format!("Server restarted on port {} (log={})", port, enable))
+}
+
+/// Start server with full configuration: optional port, log toggle, and origin type
+#[tauri::command]
+async fn start_server_with_config(
+    app: tauri::AppHandle,
+    port: Option<u16>,
+    enable_log: bool,
+    origin: String,
+) -> Result<String, String> {
+    // Stop existing server first
+    app.stop_remote_ui().await.map_err(|e| e.to_string())?;
+
+    let origin_type = match origin.as_str() {
+        "localhost" => open_tauri_remote_webview::OriginType::Localhost,
+        "direct" => open_tauri_remote_webview::OriginType::Direct,
+        "any" => open_tauri_remote_webview::OriginType::Any,
+        _ => open_tauri_remote_webview::OriginType::Localhost,
+    };
+
+    let mut cfg = RemoteUiConfig::default()
+        .set_port(port)
+        .set_allowed_origin(origin_type);
+
+    if enable_log {
+        cfg = cfg.enable_log();
+    } else {
+        cfg = cfg.disable_log();
+    }
+
+    app.start_remote_ui(cfg).await.map_err(|e| e.to_string())?;
+    let port_str = port.map(|p| p.to_string()).unwrap_or_else(|| "random".to_string());
+    Ok(format!("Server started on port {} (origin={}, log={})", port_str, origin, enable_log))
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(open_tauri_remote_webview::init())
@@ -157,10 +307,28 @@ pub fn run() {
             divide,
             // Events
             trigger_event,
+            emit_to_window,
+            emit_str_event,
+            // Rust-side event trigger tests
+            emit_simple_event,
+            emit_event_with_string,
+            emit_event_with_number,
+            emit_event_with_bool,
+            emit_event_with_object,
+            emit_event_with_array,
+            emit_event_with_nested,
+            emit_to_specific_window,
+            emit_to_all_windows,
+            emit_multiple_events,
+            // Server status
+            is_server_running,
             // Original
             increment,
             enable_server,
             disable_server,
+            restart_server,
+            toggle_server_log,
+            start_server_with_config,
             read_notes,
             write_notes,
         ])
@@ -188,8 +356,8 @@ pub fn run() {
                 )
                 .await
                 {
-                    Ok(_) => println!("[setup] WS 服务器自动启动成功 (端口 9090)"),
-                    Err(e) => eprintln!("[setup] WS 服务器自动启动失败: {e}"),
+                    Ok(_) => println!("[setup] WS server auto-started (port 9090)"),
+                    Err(e) => eprintln!("[setup] WS server auto-start failed: {e}"),
                 }
             });
             Ok(())
