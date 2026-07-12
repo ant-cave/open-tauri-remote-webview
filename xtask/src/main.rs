@@ -25,6 +25,23 @@ fn main() {
     }
 }
 
+fn kill_port(port: u16) {
+    let output = Command::new("lsof")
+        .args(["-ti", &format!(":{}", port)])
+        .output();
+    if let Ok(out) = output {
+        if out.status.success() {
+            let pids = String::from_utf8_lossy(&out.stdout);
+            for pid in pids.lines() {
+                if let Ok(pid_num) = pid.trim().parse::<i32>() {
+                    println!("  Killing process {} on port {}", pid_num, port);
+                    let _ = Command::new("kill").args(["-9", &pid_num.to_string()]).status();
+                }
+            }
+        }
+    }
+}
+
 fn run_dev() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -32,6 +49,10 @@ fn run_dev() {
         .to_path_buf();
     let guest_js = root.join("guest-js");
     let test_app = root.join("test").join("vue-app");
+
+    println!("=== 清理端口 1420 和 9090 ===");
+    kill_port(1420);
+    kill_port(9090);
 
     build_and_install(&guest_js, &test_app);
     run_dev_watch_loop(&guest_js, &test_app);

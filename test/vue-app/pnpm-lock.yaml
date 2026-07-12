@@ -12,7 +12,7 @@ importers:
         specifier: ^2.0.0
         version: 2.11.1
       open-tauri-remote-webview:
-        specifier: file:..\..\guest-js
+        specifier: file:../../guest-js
         version: file:../../guest-js(@tauri-apps/api@2.11.1)
       vue:
         specifier: ^3.5.0
