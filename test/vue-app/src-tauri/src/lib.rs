@@ -3,9 +3,8 @@ use serde::Serialize;
 use std::fs;
 
 use open_tauri_remote_webview::{
-    RemoteUiConfig, RemoteUiExt,
+    EmitterExt, RemoteUiConfig, RemoteUiExt,
 };
-use tauri::Emitter;
 
 static COUNTER: AtomicI32 = AtomicI32::new(0);
 
@@ -179,6 +178,12 @@ async fn is_server_running(app: tauri::AppHandle) -> bool {
     app.is_remote_ui_running().await
 }
 
+/// Test Window<R> EmitterExt — emits an event from a Window parameter
+#[tauri::command]
+fn emit_from_window(window: tauri::Window, name: String, payload: String) -> Result<(), String> {
+    window.emit(&name, &payload).map_err(|e| e.to_string())
+}
+
 // ── Original Commands ────────────────────────────────────
 
 fn notes_path() -> std::path::PathBuf {
@@ -322,6 +327,8 @@ pub fn run() {
             emit_multiple_events,
             // Server status
             is_server_running,
+            // Window<R> EmitterExt
+            emit_from_window,
             // Original
             increment,
             enable_server,

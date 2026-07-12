@@ -301,6 +301,16 @@ async function testRustEmitToAll() {
   unlisten();
 }
 
+async function testEmitFromWindow() {
+  const eventName = `window-emit-${Date.now()}`;
+  const unlisten = await listen<string>(eventName, (e) => {
+    add("rust-events", `Window<R> EmitterExt 发射: "${e.payload}"`);
+  });
+  await invoke("emit_from_window", { name: eventName, payload: "via Window::emit" });
+  await new Promise((r) => setTimeout(r, 100));
+  unlisten();
+}
+
 async function testRustEmitMultiple() {
   const events: [string, string][] = [];
   const received: string[] = [];
@@ -479,6 +489,7 @@ async function runCategory(id: CatId) {
       await runTestFn(id, "emit_nested", testRustEmitNested);
       await runTestFn(id, "emit_to_window", testRustEmitToWindow);
       await runTestFn(id, "emit_to_all", testRustEmitToAll);
+      await runTestFn(id, "emit_from_window", testEmitFromWindow);
       await runTestFn(id, "emit_multiple", testRustEmitMultiple);
       break;
     case "app":
