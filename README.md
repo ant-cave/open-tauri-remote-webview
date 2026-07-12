@@ -67,6 +67,8 @@ Zero migration cost. All exported APIs have identical signatures to native Tauri
 | `fn emit_filter(...)` sync | `fn emit_filter(...)` sync ✅ | None |
 | `fn emit_str_filter(...)` sync | `fn emit_str_filter(...)` sync ✅ | None |
 
+**Implemented for:** `AppHandle<R>`, `WebviewWindow<R>`, **`Window<R>`** — all 6 emit methods work on all three types.
+
 **Usage:** Simply replace `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` — all calls continue to work unchanged.
 
 ### JS side
@@ -94,7 +96,7 @@ Migrating an existing Tauri app requires only a few changes. Most of your fronte
 | Area | Before (native Tauri) | After (remote) |
 |---|---|---|
 | Rust plugin | — | Add crate + `.plugin(open_tauri_remote_webview::init())` |
-| Rust `emit()` (AppHandle / WebviewWindow) | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt` (same call, sync) |
+| Rust `emit()` (AppHandle / WebviewWindow / Window) | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt` (same call, sync) |
 | Rust start WS server | — | Add `app.start_remote_ui(RemoteUiConfig::default())` in `setup` |
 | Frontend install | — | `npm install open-tauri-remote-webview` |
 | Frontend import | `import "..." from "@tauri-apps/api"` | **No change** — add `import "open-tauri-remote-webview/bridge-init"` at entry |
@@ -157,7 +159,7 @@ tauri::Builder::default()
 If you use `emit()` / `emit_to()` / `emit_str()` / etc. in Rust, replace
 `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` so events
 also get forwarded to browser clients. `EmitterExt` is implemented for
-`AppHandle` and `WebviewWindow` with the same **synchronous** signatures as
+`AppHandle`, `WebviewWindow`, and `Window` with the same **synchronous** signatures as
 `tauri::Emitter` — it is a true drop-in replacement.
 
 ### 2. Frontend — zero-effort (recommended)

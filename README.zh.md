@@ -65,6 +65,8 @@ Playwright/Cypress 控制的是标准浏览器，而 Tauri 应用运行在系统
 | `fn emit_filter(...)` 同步 | `fn emit_filter(...)` 同步 ✅ | 无 |
 | `fn emit_str_filter(...)` 同步 | `fn emit_str_filter(...)` 同步 ✅ | 无 |
 
+**已实现于：** `AppHandle<R>`、`WebviewWindow<R>`、**`Window<R>`** — 三种类型全部 6 个 emit 方法一致可用。
+
 **用法：** 只需把 `use tauri::Emitter` 替换为 `use open_tauri_remote_webview::EmitterExt`，所有调用无需任何改动。
 
 ### JS 端
@@ -92,7 +94,7 @@ Playwright/Cypress 控制的是标准浏览器，而 Tauri 应用运行在系统
 | 环节 | 之前（原生 Tauri） | 之后（远程模式） |
 |---|---|---|
 | Rust 插件 | — | 添加 crate + `.plugin(open_tauri_remote_webview::init())` |
-| Rust `emit()` | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt`（调用方式不变） |
+| Rust `emit()` (AppHandle / WebviewWindow / Window) | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt`（调用方式不变） |
 | Rust 启动 WS 服务器 | — | 在 `setup` 中添加 `app.start_remote_ui(...)` |
 | 前端安装 | — | `npm install open-tauri-remote-webview` |
 | 前端导入 | `@tauri-apps/api` | **无需改动** — 入口加一行 `import "open-tauri-remote-webview/bridge-init"` |
@@ -152,7 +154,7 @@ tauri::Builder::default()
 
 如果在 Rust 中使用 `emit()` / `emit_to()` / `emit_str()` 等，请将 `use tauri::Emitter` 替换为
 `use open_tauri_remote_webview::EmitterExt`，这样事件也会转发到浏览器客户端。
-`EmitterExt` 已为 `AppHandle` 和 `WebviewWindow` 实现，签名与原生完全一致。
+`EmitterExt` 已为 `AppHandle`、`WebviewWindow` **和 `Window`** 实现，签名与原生完全一致。
 
 ### 2. 前端 — 零改动（推荐）
 
