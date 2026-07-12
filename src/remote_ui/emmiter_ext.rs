@@ -6,6 +6,7 @@ use crate::RemoteUi;
 use serde::Serialize;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Error, EventTarget, Manager, Runtime, WebviewWindow};
+use tauri::window::Window;
 use tokio::sync::RwLock;
 
 /// Extension trait that mirrors [`tauri::Emitter`] with the same **synchronous**
@@ -69,6 +70,54 @@ where
 // ── AppHandle ──────────────────────────────────────────────────────────────
 
 impl<R: Runtime> EmitterExt<R> for AppHandle<R> {
+    fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Result<(), Error> {
+        forward_to_ws(self, event, payload.clone());
+        Emitter::emit(self, event, payload)
+    }
+
+    fn emit_to<I, S>(&self, target: I, event: &str, payload: S) -> Result<(), Error>
+    where
+        I: Into<EventTarget>,
+        S: Serialize + Clone,
+    {
+        forward_to_ws(self, event, payload.clone());
+        Emitter::emit_to(self, target, event, payload)
+    }
+
+    fn emit_str(&self, event: &str, payload: String) -> Result<(), Error> {
+        forward_to_ws(self, event, payload.clone());
+        Emitter::emit_str(self, event, payload)
+    }
+
+    fn emit_str_to<I>(&self, target: I, event: &str, payload: String) -> Result<(), Error>
+    where
+        I: Into<EventTarget>,
+    {
+        forward_to_ws(self, event, payload.clone());
+        Emitter::emit_str_to(self, target, event, payload)
+    }
+
+    fn emit_filter<S, F>(&self, event: &str, payload: S, filter: F) -> Result<(), Error>
+    where
+        S: Serialize + Clone,
+        F: Fn(&EventTarget) -> bool,
+    {
+        forward_to_ws(self, event, payload.clone());
+        Emitter::emit_filter(self, event, payload, filter)
+    }
+
+    fn emit_str_filter<F>(&self, event: &str, payload: String, filter: F) -> Result<(), Error>
+    where
+        F: Fn(&EventTarget) -> bool,
+    {
+        forward_to_ws(self, event, payload.clone());
+        Emitter::emit_str_filter(self, event, payload, filter)
+    }
+}
+
+// ── Window ─────────────────────────────────────────────────────────────────
+
+impl<R: Runtime> EmitterExt<R> for Window<R> {
     fn emit<S: Serialize + Clone>(&self, event: &str, payload: S) -> Result<(), Error> {
         forward_to_ws(self, event, payload.clone());
         Emitter::emit(self, event, payload)
