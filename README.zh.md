@@ -125,6 +125,9 @@ Playwright/Cypress 控制的是标准浏览器，而 Tauri 应用运行在系统
 cargo add open-tauri-remote-webview
 ```
 
+> **可选**：Cargo 特性 `ws`（默认启用）控制 WebSocket 支持。如果只需要 WebView
+> 中的 IPC 模式，可以用 `--no-default-features` 禁用以减小依赖体积。
+
 ```rust
 use open_tauri_remote_webview::{RemoteUiConfig, RemoteUiExt};
 
@@ -134,7 +137,10 @@ tauri::Builder::default()
         let handle = app.handle().clone();
         tauri::async_runtime::spawn(async move {
             handle.start_remote_ui(
-                RemoteUiConfig::default().set_port(Some(9090)),
+                RemoteUiConfig::default()
+                    .set_port(Some(9090))
+                    .enable_log(),     // Rust 端日志输出（默认开启）
+                    // .disable_log()  // ← 关闭服务端日志
             ).await.ok();
         });
         Ok(())
@@ -183,6 +189,19 @@ import { disableFloatingBadge } from "open-tauri-remote-webview/api/core";
 disableFloatingBadge();
 ```
 
+WS 客户端默认根据 `window.location` 自动检测服务端地址。
+可以通过 import 前的全局变量覆盖：
+
+```javascript
+// 方式 A — 完整 URL 覆盖
+window.__ORUI_WS_URL__ = "ws://192.168.1.100:9090/remote_ui_ws";
+
+// 方式 B — 仅覆盖端口（使用当前 hostname）
+window.__ORUI_WS_PORT__ = 9090;
+
+import "open-tauri-remote-webview/bridge-init";
+```
+
 ### 3. 前端 — 显式 API（备选）
 
 ```javascript
@@ -224,6 +243,23 @@ async fn disable_server(app: AppHandle) -> Result<String, String> {
 
 ## 桥接原理
 
+### 异步环境检测
+
+`bridge-init` 会**异步检测**运行环境，然后再决定是否安装桥接：
+
+```
+模块加载
+  ↓
+waitForTauriDetection()  ← 轮询 __TAURI_INTERNALS__（最长 3 秒）
+  ├── 检测到原生 Tauri  →  跳过桥接，使用真实 IPC
+  └── 检测到浏览器环境  →  安装 WS 桥接 shim
+```
+
+这消除了 `__TAURI_INTERNALS__` 尚未注入时的竞态条件。完全自动检测，
+无需 `isTauri()` 守卫代码。
+
+### WS 代理 shim
+
 当应用在浏览器中运行时，`installTauriBridge` 会注入 `__TAURI_INTERNALS__` 代理 shim，
 模拟真实的 Tauri 运行时：
 
@@ -241,6 +277,12 @@ window.__TAURI_INTERNALS__.invoke(cmd, args)
 - `convertFileSrc` — 原样返回路径（浏览器没有资产协议）
 - `plugins.path` — 从 `navigator.platform` 推断
 - `__TAURI_REMOTE_UI_SHIM__` 标记 — 让应用区分 shim 与真实 Tauri
+
+### 前端结构化日志
+
+所有模块均使用内置的结构化日志系统（`src/logger.ts`），输出带时间戳和
+日志级别（`DEBUG` / `INFO` / `WARN` / `ERROR`）。打开浏览器 DevTools
+即可看到完整的组件初始化流程，对调试连接问题非常有帮助。
 
 ---
 
@@ -299,6 +341,10 @@ cd test/vue-app && pnpm tauri dev
 # 测试应用（无头模式，只跑 WS 无窗口）
 cd test/vue-app && npm run rdev
 ```
+
+> `cargo xtask dev` 还会在启动前清理 1420 和 9090 端口、清除 Vite 缓存、
+> 并监视 `guest-js/src/` + `guest-js/api/` 目录的文件变化 ——
+> 自动重建 JS 并热重装到测试应用。
 
 ---
 

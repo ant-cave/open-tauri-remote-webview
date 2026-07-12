@@ -124,6 +124,9 @@ Migrating an existing Tauri app requires only a few changes. Most of your fronte
 cargo add open-tauri-remote-webview
 ```
 
+> **Optional**: The `ws` Cargo feature (enabled by default) controls WebSocket support.
+> Disable it with `--no-default-features` if you only need IPC in WebView.
+
 ```rust
 use open_tauri_remote_webview::{RemoteUiConfig, RemoteUiExt};
 
@@ -134,7 +137,10 @@ tauri::Builder::default()
         let handle = app.handle().clone();
         tauri::async_runtime::spawn(async move {
             handle.start_remote_ui(
-                RemoteUiConfig::default().set_port(Some(9090)),
+                RemoteUiConfig::default()
+                    .set_port(Some(9090))
+                    .enable_log(),    // Rust-side log output (default: on)
+                    // .disable_log() // ← suppress server logs
             ).await.ok();
         });
         Ok(())
@@ -185,6 +191,19 @@ import { disableFloatingBadge } from "open-tauri-remote-webview/api/core";
 disableFloatingBadge();
 ```
 
+By default the WS client auto-detects the server URL from `window.location`.
+Override it with a global before import:
+
+```javascript
+// Option A — full URL override
+window.__ORUI_WS_URL__ = "ws://192.168.1.100:9090/remote_ui_ws";
+
+// Option B — port override (uses current hostname)
+window.__ORUI_WS_PORT__ = 9090;
+
+import "open-tauri-remote-webview/bridge-init";
+```
+
 ### 3. Frontend — explicit API (alternative)
 
 ```javascript
@@ -226,6 +245,24 @@ async fn disable_server(app: AppHandle) -> Result<String, String> {
 
 ## How the bridge works
 
+### Async environment detection
+
+`bridge-init` **asynchronously** detects the runtime environment before taking
+any action:
+
+```
+module load
+  ↓
+waitForTauriDetection()  ← polls __TAURI_INTERNALS__ (up to 3s)
+  ├── Native Tauri found  →  skip bridge, use real IPC
+  └── Browser detected    →  install WS bridge shim
+```
+
+This eliminates race conditions where `__TAURI_INTERNALS__` isn't injected yet
+when your frontend code runs. No `isTauri()` guards needed.
+
+### WS proxy shim
+
 The `__TAURI_INTERNALS__` proxy shim (`installTauriBridge`) is injected when
 your app runs in a browser. It mimics the real Tauri runtime:
 
@@ -243,6 +280,12 @@ window.__TAURI_INTERNALS__.invoke(cmd, args)
 - `convertFileSrc` — returns path as-is (browser has no asset protocol)
 - `plugins.path` — inferred from `navigator.platform`
 - `__TAURI_REMOTE_UI_SHIM__` flag — lets apps distinguish shim from real Tauri
+
+### Frontend structured logging
+
+All modules use a built-in structured logger with timestamps and log levels
+(`DEBUG` / `INFO` / `WARN` / `ERROR`). Open browser DevTools to see detailed
+lifecycle traces — useful for debugging connection issues.
 
 ---
 
@@ -301,6 +344,9 @@ cd test/vue-app && pnpm tauri dev
 # Test app (headless, WS only — no window)
 cd test/vue-app && npm run rdev
 ```
+
+> `cargo xtask dev` also cleans ports 1420 and 9090, clears the Vite cache,
+> and watches `guest-js/src/` + `guest-js/api/` for auto-rebuild.
 
 ---
 
