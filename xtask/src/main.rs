@@ -41,7 +41,16 @@ fn build_and_install(guest_js: &PathBuf, test_app: &PathBuf) {
     println!("=== 1. 编译前端 JS 包 ===");
     run_cmd_blocking("npm", &["run", "build"], guest_js);
 
-    println!("=== 2. 重新安装前端包 ===");
+    println!("=== 2. 清除 Vite 缓存 ===");
+    for dir_name in &[".vite", ".vite-temp"] {
+        let cache_dir = test_app.join("node_modules").join(dir_name);
+        if cache_dir.exists() {
+            println!("  删除: {}", cache_dir.display());
+            let _ = std::fs::remove_dir_all(&cache_dir);
+        }
+    }
+
+    println!("=== 3. 重新安装前端包 ===");
     run_cmd_blocking("pnpm", &["remove", "open-tauri-remote-webview"], test_app);
     run_cmd_blocking(
         "pnpm",
@@ -116,7 +125,7 @@ fn run_dev_watch_loop(guest_js: &PathBuf, test_app: &PathBuf) {
 }
 
 fn start_tauri_dev(test_app: &PathBuf) -> Child {
-    println!("=== 3. 启动 Tauri Dev ===");
+    println!("=== 4. 启动 Tauri Dev ===");
     let program = if cfg!(windows) {
         "pnpm.cmd"
     } else {
