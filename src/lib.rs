@@ -9,9 +9,11 @@ use tauri::{
 
 pub use models::*;
 
+mod command_registry;
 mod error;
 mod models;
 pub mod remote_ui;
+pub use command_registry::CommandRegistry;
 pub use error::{Error, Result};
 pub use remote_ui::*;
 
@@ -21,6 +23,7 @@ pub fn init() -> TauriPlugin<Wry> {
         .setup(|app, api| {
             let remote_ui = remote_ui::init(app, api)?;
             app.manage(remote_ui);
+            app.manage(CommandRegistry::new());
             Ok(())
         })
         .build()

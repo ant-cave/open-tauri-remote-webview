@@ -181,7 +181,7 @@ impl RpcServer {
     /// Spawns the WebSocket server inside tokio task of tauri
     #[cfg(feature = "ws")]
     pub(crate) fn spawn_http_server(&mut self) -> Result<(), Error> {
-        let origin = "0.0.0.0";
+        let origin: &str = self.remote_ui_config.get_allowed_origin().into();
         let app_handle = self.app.clone();
         let port = self.remote_ui_config.get_port().unwrap_or_default();
         self.is_active = true;

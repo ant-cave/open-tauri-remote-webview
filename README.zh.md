@@ -1,4 +1,4 @@
-# Open Tauri Remote WebView
+# Open Tauri Remote WebView — IPC WebSocket 桥接器 for Tauri v2
 
 [![crates.io](https://img.shields.io/crates/v/open-tauri-remote-webview)](https://crates.io/crates/open-tauri-remote-webview)
 [![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
@@ -11,27 +11,22 @@
 
 ---
 
-## 为什么需要它？
+## 这是什么
 
-开发 Tauri 应用时，有些事是原生 Tauri **做不到**的：
+本插件通过 WebSocket 暴露 Tauri 应用的 IPC 层（命令 + 事件），让浏览器可以像在原生 WebView 中一样调用 Tauri 命令和接收事件。
 
-**「想做 E2E 自动化测试，但 Playwright、Cypress 根本不认识 Tauri 的 WebView。」**
-Playwright/Cypress 控制的是标准浏览器，而 Tauri 应用运行在系统 WebView 中。原生 Tauri 无法被这些工具直接访问。本插件将应用 UI 通过标准 WebSocket 暴露，所有 Web 测试工具开箱即用。
+适用场景：
+- **前端开发** — 在浏览器中使用完整 DevTools 开发和调试 Tauri 前端，无需安装 Rust/Tauri 工具链
+- **E2E 测试** — 让 Playwright 或 Cypress 直接连接 Tauri 后端
+- **CI/CD 测试** — 在 CI 中测试应用的 IPC 层，无需 xvfb
 
-**「应用需要在远程服务器上运行，但服务器没有显示器。」**
-原生 Tauri 依赖本地显示环境，无法在无显示器的服务器上启动后通过浏览器远程访问。本插件让应用像 Web 服务一样，在服务端启动、在浏览器中操作，无需 VNC、无需远程桌面。
+## 这不是什么
 
-**「想在 CI/CD 中做 UI 集成测试，但环境配置极其复杂。」**
-在 CI 中测试原生 Tauri 需要模拟显示环境（xvfb 等），且无法与 Web 测试框架集成。本插件让 CI 流水线直接用 Playwright 连接应用，像测试普通网站一样简单。
+- **不是远程 WebView 渲染器** — 浏览器看不到 Tauri WebView 的渲染输出。它加载自己的前端副本，通过 WebSocket 通信。
+- **不是真正的无头模式** — 通过 WS 调用的命令目前需要经过原生 WebView 分发。必须存在一个真正的 `WebviewWindow("main")`。通过 `CommandRegistry` API（见下文）可以去掉这一要求。
+- **不是完整的 `@tauri-apps/api` 替代品** — 目前只桥接了 `invoke`、`listen` 和 `once`。`dialog`、`fs`、`shell` 等模块需要自定义命令。
 
-**「团队中有多个开发者，但每人都要先跑起整个 Tauri 环境才能开始前端开发。」**
-有了本插件，团队成员只需打开浏览器就能看到应用界面，无需安装 Rust、无需配置 Tauri 开发环境，前端开发者可以独立工作。
-
-说白了就是：
-
-> **加一行 import，Tauri 应用就能在浏览器里开搞 —— 上面说的这些事，原生 Tauri 一个都干不了，而且你一行业务代码都不用改。**
-
-本项目基于 [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0) by [DraviaVemal](https://github.com/DraviaVemal)，在 MIT 协议下修改。所有新增代码 Copyright (c) 2026 **ant-cave**。（MIT 协议，随便用、随便改、商用也行。唯一的要求：如果分发代码，保留版权声明就行。）
+本项目基于 [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0) by [DraviaVemal](https://github.com/DraviaVemal)，在 MIT 协议下修改。所有新增代码 Copyright (c) 2026 **ant-cave**。
 
 ---
 
@@ -77,11 +72,18 @@ Playwright/Cypress 控制的是标准浏览器，而 Tauri 应用运行在系统
 | `listen<T>(event, handler): Promise<() => void>` | 透明代理 ✅ | `listen<T>(event, handler)` ✅ | 无 |
 | `once<T>(event, handler): Promise<() => void>` | 透明代理 ✅ | `once<T>(event, handler)` ✅ | 无 |
 
-### 已知限制（架构决定，非 API 差异）
+### 已知限制
 
-- **仅支持单窗口模式**：`getCurrentWindow()` 始终返回 `label: "main"`
-- **无资产协议**：`convertFileSrc()` 原样返回路径，请使用原始 URL 访问资产
-- **无 `__TAURI__` 环境变量**：桥接设置 `__TAURI_REMOTE_UI_SHIM__` 标记作为替代
+| 限制 | 说明 | 解决方法 |
+|---|---|---|
+| **单窗口模式** | `getCurrentWindow()` 始终返回 `label: "main"` | 在命令中使用明确的窗口标签 |
+| **无资产协议** | `convertFileSrc()` 原样返回路径 | 使用原始 URL 访问资产 |
+| **无 `__TAURI__` 环境变量** | 桥接设置 `__TAURI_REMOTE_UI_SHIM__` 标记作为替代 | 检查两者之一 |
+| **`invoke` 需要 WebView** | 未注册的命令需要通过真实的 `WebviewWindow("main")` 分发 | 在 `CommandRegistry` 中注册命令（见下文） |
+| **未认证的 WS** | WebSocket 端点没有认证机制 | 使用防火墙/网络隔离 |
+| **`@tauri-apps/api/dialog`** | 未桥接 | 通过自定义 Tauri 命令暴露 |
+| **`@tauri-apps/api/fs`** | 未桥接 | 通过自定义 Tauri 命令暴露 |
+| **`@tauri-apps/api/shell`** | 未桥接 | 通过自定义 Tauri 命令暴露 |
 
 ---
 
@@ -141,7 +143,7 @@ tauri::Builder::default()
             handle.start_remote_ui(
                 RemoteUiConfig::default()
                     .set_port(Some(9090))
-                    .enable_log(),     // Rust 端日志输出（默认开启）
+                    .enable_log()     // Rust 端日志输出（默认开启）
                     // .disable_log()  // ← 关闭服务端日志
             ).await.ok();
         });
@@ -225,7 +227,41 @@ server: {
 },
 ```
 
-### 5. 手动启停服务
+### 5. CommandRegistry — 无需 WebView 调用 invoke（可选）
+
+默认情况下，通过 WS 调用的命令需要经过真实的 `WebviewWindow("main")` 通过 `window.eval()` 分发。要消除这一依赖，让命令**无需任何 WebView** 也能工作，可以在 `CommandRegistry` 中注册它们：
+
+```rust
+use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
+use serde_json::Value;
+
+fn my_command(args: Option<Value>) -> Result<Value, String> {
+    // 解析参数并返回结果
+    Ok(serde_json::json!({"status": "ok"}))
+}
+
+tauri::Builder::default()
+    .plugin(open_tauri_remote_webview::init())
+    .setup(|app| {
+        // 注册命令，实现无头 WS 访问
+        let registry = app.state::<CommandRegistry>();
+        registry.register("my_command", my_command);
+
+        let handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            handle.start_remote_ui(RemoteUiConfig::default()).await.ok();
+        });
+        Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error running app");
+```
+
+在 `CommandRegistry` 中注册的命令直接从 Rust 分发——无需 `window.eval()`，无需 WebView。未在注册表中找到的命令会回退到 WebView 路径，保持向后兼容。
+
+> **注意：** 使用 `CommandRegistry` 时，你的命令函数接收原始的 `Option<Value>` 参数，需要手动解析。这是比 `#[tauri::command]` 更低层的 API，但独立于 Tauri 的 IPC 系统。
+
+### 6. 手动启停服务
 
 ```rust
 async fn enable_server(app: AppHandle, port: u16) -> Result<String, String> {
@@ -245,20 +281,24 @@ async fn disable_server(app: AppHandle) -> Result<String, String> {
 
 ## 桥接原理
 
-### 异步环境检测
+### 环境检测
 
-`bridge-init` 会**异步检测**运行环境，然后再决定是否安装桥接：
+`bridge-init` 会**立即**检测运行环境（无需轮询）：
+
+1. **设置了 `__ORUI_WS_URL__` 或 `__ORUI_WS_PORT__`** → 浏览器模式（用户显式指定 WS）
+2. **存在 `__TAURI_INTERNALS__`**（且不是 shim）→ 原生 Tauri 模式
+3. **其他情况** → 浏览器模式（WS 桥接）
 
 ```
 模块加载
   ↓
-waitForTauriDetection()  ← 轮询 __TAURI_INTERNALS__（最长 3 秒）
-  ├── 检测到原生 Tauri  →  跳过桥接，使用真实 IPC
-  └── 检测到浏览器环境  →  安装 WS 桥接 shim
+检查全局变量
+  ├── __ORUI_WS_URL__/__ORUI_WS_PORT__ 已设置  →  安装 WS 桥接 shim
+  ├── __TAURI_INTERNALS__ 存在（原生）           →  跳过桥接，使用真实 IPC
+  └── 其他                                      →  安装 WS 桥接 shim
 ```
 
-这消除了 `__TAURI_INTERNALS__` 尚未注入时的竞态条件。完全自动检测，
-无需 `isTauri()` 守卫代码。
+无需轮询、无需 User-Agent 检测、无需 3 秒延迟。
 
 ### WS 代理 shim
 

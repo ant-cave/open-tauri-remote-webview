@@ -7,7 +7,7 @@ import { addEventListener } from "./ws-event.js";
 import * as logger from "./logger.js";
 
 const MODULE = "tauri-internals";
-logger.info(MODULE, "=== 模块开始加载 ===");
+logger.info(MODULE, "=== module loading ===");
 
 /**
  * Manages callback IDs mapping for the __TAURI_INTERNALS__ shim.
@@ -18,7 +18,7 @@ class ShimCallbackManager {
   private nextId = 1;
 
   constructor() {
-    logger.debug(MODULE, "ShimCallbackManager 实例已创建");
+    logger.debug(MODULE, "ShimCallbackManager instance created");
   }
 
   transformCallback<T = unknown>(
@@ -26,23 +26,23 @@ class ShimCallbackManager {
     once?: boolean,
   ): number {
     const id = this.nextId++;
-    logger.debug(MODULE, `transformCallback() 注册回调 [id=${id}, once=${once}]`);
+    logger.debug(MODULE, `transformCallback() register callback [id=${id}, once=${once}]`);
     this.callbacks.set(id, (data: unknown) => {
-      logger.debug(MODULE, `执行回调 [id=${id}]`);
+      logger.debug(MODULE, `executing callback [id=${id}]`);
       if (once) {
-        logger.debug(MODULE, `回调标记为 once，执行后移除 [id=${id}]`);
+        logger.debug(MODULE, `callback marked as once, removing after execution [id=${id}]`);
         this.callbacks.delete(id);
       }
       if (callback) {
         try {
           callback(data as T);
-          logger.debug(MODULE, `回调执行成功 [id=${id}]`);
+          logger.debug(MODULE, `callback executed successfully [id=${id}]`);
         } catch (err) {
-          logger.error(MODULE, `回调执行异常 [id=${id}]: ${err}`);
+          logger.error(MODULE, `callback execution error [id=${id}]: ${err}`);
         }
       }
     });
-    logger.debug(MODULE, `当前回调总数: ${this.callbacks.size}`);
+    logger.debug(MODULE, `total callbacks: ${this.callbacks.size}`);
     return id;
   }
 
@@ -50,17 +50,17 @@ class ShimCallbackManager {
     logger.debug(MODULE, `unregisterCallback() [id=${id}]`);
     const existed = this.callbacks.has(id);
     this.callbacks.delete(id);
-    logger.debug(MODULE, `回调移除${existed ? "成功" : "失败（不存在）"} [id=${id}]，剩余回调数: ${this.callbacks.size}`);
+    logger.debug(MODULE, `callback removal ${existed ? "succeeded" : "failed (not found)"} [id=${id}], remaining callbacks: ${this.callbacks.size}`);
   }
 
   runCallback(id: number, data: unknown): void {
     logger.debug(MODULE, `runCallback() [id=${id}]`);
     const cb = this.callbacks.get(id);
     if (cb) {
-      logger.debug(MODULE, `找到回调，执行 [id=${id}]`);
+      logger.debug(MODULE, `callback found, executing [id=${id}]`);
       cb(data);
     } else {
-      logger.warn(MODULE, `回调不存在 [id=${id}]`);
+      logger.warn(MODULE, `callback not found [id=${id}]`);
     }
   }
 }
@@ -73,26 +73,26 @@ class ShimCallbackManager {
  * Call this once before any `@tauri-apps/api` imports are used.
  */
 export function installTauriBridge(): void {
-  logger.info(MODULE, ">>> installTauriBridge() 开始执行");
+  logger.info(MODULE, ">>> installTauriBridge() executing");
 
   if (typeof window === "undefined") {
-    logger.warn(MODULE, "window 对象不存在，跳过安装");
+    logger.warn(MODULE, "window object not found, skipping installation");
     return;
   }
-  logger.debug(MODULE, "window 对象检查通过");
+  logger.debug(MODULE, "window object check passed");
 
   // Already has a real Tauri runtime or shim already installed
   if ((window as unknown as Record<string, unknown>).__TAURI_INTERNALS__) {
-    logger.warn(MODULE, "__TAURI_INTERNALS__ 已存在，跳过安装（可能是原生 Tauri 或已安装 shim）");
+    logger.warn(MODULE, "__TAURI_INTERNALS__ already exists, skipping installation (native Tauri or shim already installed)");
     return;
   }
-  logger.debug(MODULE, "__TAURI_INTERNALS__ 不存在，继续安装流程");
+  logger.debug(MODULE, "__TAURI_INTERNALS__ not found, continuing installation");
 
-  logger.info(MODULE, "创建 ShimCallbackManager 实例");
+  logger.info(MODULE, "creating ShimCallbackManager instance");
   const callbacks = new ShimCallbackManager();
 
   // Per-event, per-handlerId cleanup functions for intercepted plugin:event|listen
-  logger.debug(MODULE, "初始化 handlerCleanups 映射表");
+  logger.debug(MODULE, "initializing handlerCleanups map");
   const handlerCleanups = new Map<string, Map<number, () => void>>();
 
   // ── Intercepted commands ─────────────────────────────────
@@ -100,7 +100,7 @@ export function installTauriBridge(): void {
   // plugin:event|unlisten  →  unregister from WS event system
   // (everything else passes through to wsInvoke)
 
-  logger.info(MODULE, "构建 shim 对象...");
+  logger.info(MODULE, "building shim object...");
 
   const shim = {
     invoke: async <T>(
@@ -109,62 +109,62 @@ export function installTauriBridge(): void {
       _options?: Record<string, unknown>,
     ): Promise<T> => {
       logger.info(MODULE, `shim.invoke() [cmd="${cmd}"]`);
-      logger.debug(MODULE, `shim.invoke() 参数: ${JSON.stringify(args)}`);
+      logger.debug(MODULE, `shim.invoke() args: ${JSON.stringify(args)}`);
 
       if (cmd === "plugin:event|listen") {
-        logger.info(MODULE, "拦截到 plugin:event|listen 命令");
+        logger.info(MODULE, "intercepted plugin:event|listen command");
         const event = args?.event as string;
         const handlerId = args?.handler as number;
-        logger.debug(MODULE, `事件名称: "${event}", handlerId: ${handlerId}`);
+        logger.debug(MODULE, `event name: "${event}", handlerId: ${handlerId}`);
 
         if (event && handlerId) {
-          logger.info(MODULE, `注册事件监听器: event="${event}", handlerId=${handlerId}`);
+          logger.info(MODULE, `registering event listener: event="${event}", handlerId=${handlerId}`);
           const unlisten = addEventListener(event, (payload: unknown) => {
-            logger.debug(MODULE, `事件 "${event}" 触发，调用回调 [handlerId=${handlerId}]`);
+            logger.debug(MODULE, `event "${event}" triggered, invoking callback [handlerId=${handlerId}]`);
             // Wrap in { payload: ... } to match @tauri-apps/api/event convention
             callbacks.runCallback(handlerId, { payload });
           });
           if (!handlerCleanups.has(event)) {
-            logger.debug(MODULE, `为事件 "${event}" 创建清理函数映射`);
+            logger.debug(MODULE, `creating cleanup function map for event "${event}"`);
             handlerCleanups.set(event, new Map());
           }
           handlerCleanups.get(event)!.set(handlerId, unlisten);
-          logger.debug(MODULE, `事件 "${event}" 的清理函数已注册 [handlerId=${handlerId}]`);
+          logger.debug(MODULE, `cleanup function registered for event "${event}" [handlerId=${handlerId}]`);
         } else {
-          logger.warn(MODULE, `plugin:event|listen 参数不完整: event=${event}, handlerId=${handlerId}`);
+          logger.warn(MODULE, `plugin:event|listen incomplete params: event=${event}, handlerId=${handlerId}`);
         }
-        logger.info(MODULE, "plugin:event|listen 处理完成，返回 undefined");
+        logger.info(MODULE, "plugin:event|listen processed, returning undefined");
         return undefined as T;
       }
 
       if (cmd === "plugin:event|unlisten") {
-        logger.info(MODULE, "拦截到 plugin:event|unlisten 命令");
+        logger.info(MODULE, "intercepted plugin:event|unlisten command");
         const event = args?.event as string;
         const eventId = args?.eventId as number;
-        logger.debug(MODULE, `事件名称: "${event}", eventId: ${eventId}`);
+        logger.debug(MODULE, `event name: "${event}", eventId: ${eventId}`);
 
         if (event && eventId) {
-          logger.info(MODULE, `取消事件监听: event="${event}", eventId=${eventId}`);
+          logger.info(MODULE, `unlisten event: event="${event}", eventId=${eventId}`);
           const cleanups = handlerCleanups.get(event);
           const unlisten = cleanups?.get(eventId);
           if (unlisten) {
-            logger.debug(MODULE, `找到清理函数，执行取消监听 [event="${event}", eventId=${eventId}]`);
+            logger.debug(MODULE, `cleanup function found, executing unlisten [event="${event}", eventId=${eventId}]`);
             unlisten();
             cleanups?.delete(eventId);
-            logger.debug(MODULE, `清理函数已执行并移除 [event="${event}", eventId=${eventId}]`);
+            logger.debug(MODULE, `cleanup function executed and removed [event="${event}", eventId=${eventId}]`);
           } else {
-            logger.warn(MODULE, `未找到清理函数 [event="${event}", eventId=${eventId}]`);
+            logger.warn(MODULE, `cleanup function not found [event="${event}", eventId=${eventId}]`);
           }
         } else {
-          logger.warn(MODULE, `plugin:event|unlisten 参数不完整: event=${event}, eventId=${eventId}`);
+          logger.warn(MODULE, `plugin:event|unlisten incomplete params: event=${event}, eventId=${eventId}`);
         }
-        logger.info(MODULE, "plugin:event|unlisten 处理完成，返回 undefined");
+        logger.info(MODULE, "plugin:event|unlisten processed, returning undefined");
         return undefined as T;
       }
 
-      logger.info(MODULE, `普通命令调用，转发到 wsInvoke: cmd="${cmd}"`);
+      logger.info(MODULE, `regular command, forwarding to wsInvoke: cmd="${cmd}"`);
       const result = await wsInvoke<T>(cmd, args);
-      logger.info(MODULE, `wsInvoke 调用完成: cmd="${cmd}"`);
+      logger.info(MODULE, `wsInvoke call completed: cmd="${cmd}"`);
       return result;
     },
 
@@ -173,8 +173,8 @@ export function installTauriBridge(): void {
     runCallback: callbacks.runCallback.bind(callbacks),
 
     convertFileSrc: (filePath: string, _protocol?: string): string => {
-      logger.debug(MODULE, `convertFileSrc() [filePath="${filePath}", protocol=${_protocol || "未指定"}]`);
-      logger.debug(MODULE, `convertFileSrc() 返回原始路径: "${filePath}"`);
+      logger.debug(MODULE, `convertFileSrc() [filePath="${filePath}", protocol=${_protocol || "unspecified"}]`);
+      logger.debug(MODULE, `convertFileSrc() returning raw path: "${filePath}"`);
       return filePath;
     },
 
@@ -191,29 +191,29 @@ export function installTauriBridge(): void {
     },
   };
 
-  logger.debug(MODULE, "shim 对象构建完成");
+  logger.debug(MODULE, "shim object built");
   logger.debug(MODULE, `shim.metadata: ${JSON.stringify(shim.metadata)}`);
   logger.debug(MODULE, `shim.plugins.path: ${JSON.stringify(shim.plugins.path)}`);
 
   // Mark this as a shim so apps can distinguish from real Tauri runtime
-  logger.info(MODULE, "设置 __TAURI_REMOTE_UI_SHIM__ = true（标记为 shim 环境）");
+  logger.info(MODULE, "setting __TAURI_REMOTE_UI_SHIM__ = true (marking as shim environment)");
   (window as unknown as Record<string, unknown>).__TAURI_REMOTE_UI_SHIM__ = true;
 
-  logger.info(MODULE, "安装 __TAURI_INTERNALS__ 到 window 对象");
+  logger.info(MODULE, "installing __TAURI_INTERNALS__ on window object");
   (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__ = shim;
-  logger.debug(MODULE, "__TAURI_INTERNALS__ 安装完成");
+  logger.debug(MODULE, "__TAURI_INTERNALS__ installation complete");
 
-  logger.info(MODULE, "安装 __TAURI_EVENT_PLUGIN_INTERNALS__ 到 window 对象");
+  logger.info(MODULE, "installing __TAURI_EVENT_PLUGIN_INTERNALS__ on window object");
   (window as unknown as Record<string, unknown>).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
     unregisterListener: (_event: string, eventId: number) => {
       logger.debug(MODULE, `__TAURI_EVENT_PLUGIN_INTERNALS__.unregisterListener() [event="${_event}", eventId=${eventId}]`);
       callbacks.unregisterCallback(eventId);
     },
   };
-  logger.debug(MODULE, "__TAURI_EVENT_PLUGIN_INTERNALS__ 安装完成");
+  logger.debug(MODULE, "__TAURI_EVENT_PLUGIN_INTERNALS__ installation complete");
 
-  logger.info(MODULE, "=== installTauriBridge() 执行完成 ===");
-  logger.info(MODULE, "Tauri Bridge Shim 已成功安装到浏览器环境");
+  logger.info(MODULE, "=== installTauriBridge() completed ===");
+  logger.info(MODULE, "Tauri Bridge Shim successfully installed in browser environment");
 }
 
-logger.info(MODULE, "=== 模块加载完成 ===");
+logger.info(MODULE, "=== module loading complete ===");

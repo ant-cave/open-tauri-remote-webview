@@ -10,68 +10,68 @@ import { isNativeTauri } from "../src/environment.js";
 export type { WsStats };
 
 const MODULE = "api/core";
-logger.info(MODULE, "=== 模块开始加载 ===");
+logger.info(MODULE, "=== module loading ===");
 
 /** True when running inside the real Tauri WebView (not the browser shim). */
 function isRealTauri(): boolean {
   const result = isNativeTauri();
-  logger.debug(MODULE, `isRealTauri() 检测: ${result}`);
+  logger.debug(MODULE, `isRealTauri() check: ${result}`);
   return result;
 }
 
 export function setBaseUrl(url: string) {
   logger.info(MODULE, `>>> setBaseUrl() URL: ${url}`);
   wsClient.setUrl(url);
-  logger.info(MODULE, "setBaseUrl() 完成");
+  logger.info(MODULE, "setBaseUrl() completed");
 }
 
 async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
-  logger.debug(MODULE, `tauriInvoke() 调用原生 Tauri invoke [cmd="${cmd}"]`);
+  logger.debug(MODULE, `tauriInvoke() invoking native Tauri invoke [cmd="${cmd}"]`);
   const { invoke } = await import("@tauri-apps/api/core");
-  logger.debug(MODULE, `@tauri-apps/api/core 动态导入完成`);
+  logger.debug(MODULE, `@tauri-apps/api/core dynamic import completed`);
   const result = await invoke<T>(cmd, args);
-  logger.debug(MODULE, `tauriInvoke() 完成 [cmd="${cmd}"]`);
+  logger.debug(MODULE, `tauriInvoke() completed [cmd="${cmd}"]`);
   return result;
 }
 
 export async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   logger.info(MODULE, `>>> invoke() [cmd="${cmd}"]`);
-  logger.debug(MODULE, `invoke() 参数: ${JSON.stringify(args)}`);
+  logger.debug(MODULE, `invoke() args: ${JSON.stringify(args)}`);
 
   if (isRealTauri()) {
-    logger.info(MODULE, `使用原生 Tauri invoke [cmd="${cmd}"]`);
+    logger.info(MODULE, `using native Tauri invoke [cmd="${cmd}"]`);
     const result = await tauriInvoke<T>(cmd, args);
-    logger.info(MODULE, `invoke() 完成（原生模式）[cmd="${cmd}"]`);
+    logger.info(MODULE, `invoke() completed (native mode) [cmd="${cmd}"]`);
     return result;
   }
 
-  logger.info(MODULE, `使用 WebSocket invoke [cmd="${cmd}"]`);
+  logger.info(MODULE, `using WebSocket invoke [cmd="${cmd}"]`);
   const result = await wsInvoke<T>(cmd, args);
-  logger.info(MODULE, `invoke() 完成（WS 模式）[cmd="${cmd}"]`);
+  logger.info(MODULE, `invoke() completed (WS mode) [cmd="${cmd}"]`);
   return result;
 }
 
 export function getWsStatus(): string {
   const status = wsClient.getStatus();
-  logger.debug(MODULE, `getWsStatus() 返回: ${status}`);
+  logger.debug(MODULE, `getWsStatus() returns: ${status}`);
   return status;
 }
 
 export function onWsStatusChange(cb: (status: string) => void): () => void {
-  logger.info(MODULE, ">>> onWsStatusChange() 注册状态变更监听器");
+  logger.info(MODULE, ">>> onWsStatusChange() registering status change listener");
   const unsub = wsClient.onStatusChange(cb);
-  logger.info(MODULE, "状态变更监听器已注册");
+  logger.info(MODULE, "status change listener registered");
   return unsub;
 }
 
 export function getWsStats(): WsStats {
-  logger.debug(MODULE, ">>> getWsStats() 获取 WebSocket 统计信息");
+  logger.debug(MODULE, ">>> getWsStats() fetching WebSocket stats");
   const stats = wsClient.getStats();
-  logger.debug(MODULE, `统计信息: status=${stats.status}, latency=${stats.latency}, connects=${stats.connectCount}`);
+  logger.debug(MODULE, `stats: status=${stats.status}, latency=${stats.latency}, connects=${stats.connectCount}`);
   return stats;
 }
 
 export { initFloatingBadge, disableFloatingBadge } from "../src/floating-badge.js";
 export type { FloatingBadgeOptions } from "../src/floating-badge.js";
 
-logger.info(MODULE, "=== 模块加载完成 ===");
+logger.info(MODULE, "=== module loading complete ===");

@@ -1,4 +1,4 @@
-# Open Tauri Remote WebView
+# Open Tauri Remote WebView — IPC WebSocket Bridge for Tauri v2
 
 [![crates.io](https://img.shields.io/crates/v/open-tauri-remote-webview)](https://crates.io/crates/open-tauri-remote-webview)
 [![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
@@ -11,29 +11,24 @@
 
 ---
 
-## Why this plugin?
+## What this is
 
-Building a Tauri app? Some things are **simply impossible** with native Tauri alone:
+This plugin exposes your Tauri app's IPC layer (commands + events) over WebSocket, allowing a browser to call Tauri commands and receive events as if it were running inside the native WebView.
 
-**"I want E2E tests with Playwright or Cypress, but they can't see Tauri's WebView."**
-Playwright and Cypress control standard browsers. Tauri apps run inside the system WebView — invisible to these tools. This plugin exposes your app's UI through a standard WebSocket, so any web testing tool works out of the box.
+Use it for:
+- **Frontend development** — develop and debug your Tauri frontend in a browser with full DevTools, without needing the Rust/Tauri toolchain
+- **E2E testing** — connect Playwright or Cypress directly to your Tauri backend
+- **CI/CD testing** — test your app's IPC layer in CI without xvfb
 
-**"My app needs to run on a headless server, but there's no display."**
-Native Tauri requires a local display environment. You can't start it on a server and access the UI remotely. This plugin makes your app work like a web service — start it on the server, open it in any browser. No VNC, no remote desktop needed.
+## What this is NOT
 
-**"CI/CD UI testing is a nightmare — xvfb, display mocking, fragile setup."**
-Testing native Tauri in CI requires virtual display setup and still can't integrate with web testing frameworks. This plugin lets your CI pipeline connect Playwright directly to your app, as simple as testing a regular website.
-
-**"Every developer on the team needs the full Rust + Tauri toolchain just to work on the frontend."**
-With this plugin, team members open a browser to see the app UI. No Rust installation, no Tauri environment setup. Frontend developers can work independently.
-
-Long story short:
-
-> **One import line, and your Tauri app works in a browser — none of the above is possible with native Tauri, and you don't change a single line of business logic.**
+- **Not a remote WebView renderer** — the browser doesn't see the Tauri WebView's rendered output. It loads its own copy of the frontend and communicates via WebSocket.
+- **Not truly headless** — commands invoked via WS are currently dispatched through the native WebView. A real `WebviewWindow("main")` must exist. The `CommandRegistry` API (see below) removes this requirement for registered commands.
+- **Not a complete `@tauri-apps/api` replacement** — only `invoke`, `listen`, and `once` are currently bridged. Modules like `dialog`, `fs`, `shell` require custom commands.
 
 This project is based on [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0)
 by [DraviaVemal](https://github.com/DraviaVemal), modified under the MIT license.
-All modifications are Copyright (c) 2026 **ant-cave**. (MIT — use it, modify it, sell it. Just keep the copyright notice if you redistribute.)
+All modifications are Copyright (c) 2026 **ant-cave**.
 
 ---
 
@@ -79,11 +74,18 @@ Zero migration cost. All exported APIs have identical signatures to native Tauri
 | `listen<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `listen<T>(event, handler)` ✅ | None |
 | `once<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `once<T>(event, handler)` ✅ | None |
 
-### Known limitations (architectural, not API differences)
+### Known limitations
 
-- **Single-window mode only**: `getCurrentWindow()` always returns `label: "main"`
-- **No asset protocol**: `convertFileSrc()` returns the path as-is; use raw URLs for assets
-- **No `__TAURI__` env**: the bridge sets `__TAURI_REMOTE_UI_SHIM__` instead
+| Limitation | Explanation | Workaround |
+|---|---|---|
+| **Single-window mode** | `getCurrentWindow()` always returns `label: "main"` | Use explicit window labels in commands |
+| **No asset protocol** | `convertFileSrc()` returns path as-is | Use raw URLs for assets |
+| **No `__TAURI__` env** | Bridge sets `__TAURI_REMOTE_UI_SHIM__` instead | Check for either flag |
+| **`invoke` requires WebView** | Unregistered commands need a real `WebviewWindow("main")` to dispatch through | Register commands in `CommandRegistry` (see below) |
+| **Unauthenticated WS** | No auth on the WebSocket endpoint | Use firewall/network isolation |
+| **`@tauri-apps/api/dialog`** | Not bridged | Expose as custom Tauri commands |
+| **`@tauri-apps/api/fs`** | Not bridged | Expose as custom Tauri commands |
+| **`@tauri-apps/api/shell`** | Not bridged | Expose as custom Tauri commands |
 
 ---
 
@@ -145,7 +147,7 @@ tauri::Builder::default()
             handle.start_remote_ui(
                 RemoteUiConfig::default()
                     .set_port(Some(9090))
-                    .enable_log(),    // Rust-side log output (default: on)
+                    .enable_log()    // Rust-side log output (default: on)
                     // .disable_log() // ← suppress server logs
             ).await.ok();
         });
@@ -231,7 +233,41 @@ server: {
 },
 ```
 
-### 5. Start / Stop server manually
+### 5. CommandRegistry — invoke without a WebView (optional)
+
+By default, commands invoked over WS are dispatched through a real `WebviewWindow("main")` via `window.eval()`. To remove this dependency and make commands work **without any WebView**, register them in the `CommandRegistry`:
+
+```rust
+use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
+use serde_json::Value;
+
+fn my_command(args: Option<Value>) -> Result<Value, String> {
+    // Parse args and return result
+    Ok(serde_json::json!({"status": "ok"}))
+}
+
+tauri::Builder::default()
+    .plugin(open_tauri_remote_webview::init())
+    .setup(|app| {
+        // Register commands for headless WS access
+        let registry = app.state::<CommandRegistry>();
+        registry.register("my_command", my_command);
+
+        let handle = app.handle().clone();
+        tauri::async_runtime::spawn(async move {
+            handle.start_remote_ui(RemoteUiConfig::default()).await.ok();
+        });
+        Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("error running app");
+```
+
+Commands registered in the `CommandRegistry` are dispatched directly from Rust — no `window.eval()`, no WebView required. Commands not found in the registry fall back to the WebView path for backwards compatibility.
+
+> **Note:** When using `CommandRegistry`, your command function receives raw `Option<Value>` arguments and must parse them manually. This is a lower-level API than `#[tauri::command]` but independent of Tauri's IPC system.
+
+### 6. Start / Stop server manually
 
 ```rust
 async fn enable_server(app: AppHandle, port: u16) -> Result<String, String> {
@@ -251,22 +287,24 @@ async fn disable_server(app: AppHandle) -> Result<String, String> {
 
 ## How the bridge works
 
-### Async environment detection
+### Environment detection
 
-`bridge-init` **asynchronously** detects the runtime environment before taking
-any action:
+`bridge-init` detects the runtime environment immediately (no polling):
+
+1. **`__ORUI_WS_URL__` or `__ORUI_WS_PORT__` set** → browser mode (user explicitly wants WS)
+2. **`__TAURI_INTERNALS__` present** (and not the shim) → native Tauri mode
+3. **Otherwise** → browser mode (WS bridge)
 
 ```
 module load
   ↓
-waitForTauriDetection()  ← polls __TAURI_INTERNALS__ (up to 3s)
-  ├── Native Tauri found  →  skip bridge, use real IPC
-  └── Browser detected    →  install WS bridge shim
+check globals
+  ├── __ORUI_WS_URL__/__ORUI_WS_PORT__ set  →  install WS bridge shim
+  ├── __TAURI_INTERNALS__ found (native)     →  skip bridge, use real IPC
+  └── otherwise                              →  install WS bridge shim
 ```
 
-This eliminates race conditions where `__TAURI_INTERNALS__` isn't injected yet
-when your frontend code runs. No `isTauri()` guards needed — the detection is
-fully automatic.
+No polling, no User-Agent sniffing, no 3-second delay.
 
 ### WS proxy shim
 

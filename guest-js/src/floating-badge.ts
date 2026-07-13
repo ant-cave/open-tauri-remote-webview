@@ -16,24 +16,24 @@ import wsClient from "./ws.js";
 import * as logger from "./logger.js";
 
 const MODULE = "floating-badge";
-logger.info(MODULE, "=== 模块开始加载 ===");
+logger.info(MODULE, "=== module loading ===");
 
 function formatUptime(ms: number): string {
-  logger.debug(MODULE, `formatUptime() 输入: ${ms}ms`);
+  logger.debug(MODULE, `formatUptime() input: ${ms}ms`);
   if (ms < 1000) {
     const result = ms + "ms";
-    logger.debug(MODULE, `formatUptime() 输出: ${result}`);
+    logger.debug(MODULE, `formatUptime() output: ${result}`);
     return result;
   }
   if (ms < 60000) {
     const result = (ms / 1000).toFixed(1) + "s";
-    logger.debug(MODULE, `formatUptime() 输出: ${result}`);
+    logger.debug(MODULE, `formatUptime() output: ${result}`);
     return result;
   }
   const m = Math.floor(ms / 60000);
   const s = Math.floor((ms % 60000) / 1000);
   const result = m + "m " + s + "s";
-  logger.debug(MODULE, `formatUptime() 输出: ${result}`);
+  logger.debug(MODULE, `formatUptime() output: ${result}`);
   return result;
 }
 
@@ -45,68 +45,68 @@ export interface FloatingBadgeOptions {
 }
 
 let cleanupFloatingBadge: (() => void) | null = null;
-logger.debug(MODULE, "cleanupFloatingBadge 变量已初始化");
+logger.debug(MODULE, "cleanupFloatingBadge variable initialized");
 
 export function disableFloatingBadge() {
-  logger.info(MODULE, ">>> disableFloatingBadge() 调用");
+  logger.info(MODULE, ">>> disableFloatingBadge() called");
   if (cleanupFloatingBadge) {
-    logger.debug(MODULE, "执行清理函数");
+    logger.debug(MODULE, "executing cleanup function");
     cleanupFloatingBadge();
     cleanupFloatingBadge = null;
-    logger.info(MODULE, "浮动徽章已禁用并清理");
+    logger.info(MODULE, "floating badge disabled and cleaned up");
   } else {
-    logger.debug(MODULE, "无清理函数可执行（徽章未初始化）");
+    logger.debug(MODULE, "no cleanup function to execute (badge not initialized)");
   }
 }
 
 export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
-  logger.info(MODULE, ">>> initFloatingBadge() 开始执行");
-  logger.debug(MODULE, `传入选项: ${JSON.stringify(options)}`);
+  logger.info(MODULE, ">>> initFloatingBadge() executing");
+  logger.debug(MODULE, `options: ${JSON.stringify(options)}`);
 
   if (typeof document === "undefined") {
-    logger.warn(MODULE, "document 对象不存在，跳过初始化");
+    logger.warn(MODULE, "document object not found, skipping initialization");
     return () => {};
   }
-  logger.debug(MODULE, "document 对象检查通过");
+  logger.debug(MODULE, "document object check passed");
 
   // If already initialized, clean up first
   if (cleanupFloatingBadge) {
-    logger.info(MODULE, "检测到已存在的徽章实例，执行清理");
+    logger.info(MODULE, "existing badge instance detected, performing cleanup");
     cleanupFloatingBadge();
   }
 
   const pos = options?.position ?? "bottom-right";
-  logger.debug(MODULE, `徽章位置设置为: ${pos}`);
+  logger.debug(MODULE, `badge position set to: ${pos}`);
   let showDebug = false;
   let statsTimer: ReturnType<typeof setInterval> | null = null;
 
   // ---- create elements ----
-  logger.debug(MODULE, "创建徽章 DOM 元素");
+  logger.debug(MODULE, "creating badge DOM elements");
   const badge = document.createElement("div");
   badge.className = "orui-badge orui-" + pos;
-  logger.debug(MODULE, `徽章元素已创建，className: ${badge.className}`);
+  logger.debug(MODULE, `badge element created, className: ${badge.className}`);
 
   const dot = document.createElement("span");
   dot.className = "orui-dot";
   const label = document.createElement("span");
   label.className = "orui-label";
   badge.append(dot, label);
-  logger.debug(MODULE, "徽章内部元素（dot 和 label）已创建并附加");
+  logger.debug(MODULE, "badge inner elements (dot and label) created and appended");
 
   const panel = document.createElement("div");
   panel.className = "orui-panel";
   panel.style.display = "none";
-  logger.debug(MODULE, "调试面板元素已创建（初始隐藏）");
+  logger.debug(MODULE, "debug panel element created (initially hidden)");
 
   document.body.append(badge);
   document.body.append(panel);
-  logger.info(MODULE, "徽章和面板已添加到 DOM");
+  logger.info(MODULE, "badge and panel added to DOM");
 
   // ---- inject styles ----
   const styleId = "orui-badge-style";
-  logger.debug(MODULE, `检查样式是否已注入 (styleId: ${styleId})`);
+  logger.debug(MODULE, `checking if styles are injected (styleId: ${styleId})`);
   if (!document.getElementById(styleId)) {
-    logger.info(MODULE, "样式未注入，开始创建并注入样式表");
+    logger.info(MODULE, "styles not injected, creating and injecting stylesheet");
     const style = document.createElement("style");
     style.id = styleId;
     style.textContent = `
@@ -211,22 +211,22 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
 .orui-log { font-size: 10px; line-height: 1.4; max-height: 150px; overflow-y: auto; background: #f6f8fa; padding: 4px 6px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; color: #24292f; font-family: "JetBrains Mono", "Fira Code", monospace; }
 `;
     document.head.append(style);
-    logger.info(MODULE, "样式表注入完成");
+    logger.info(MODULE, "stylesheet injection complete");
   } else {
-    logger.debug(MODULE, "样式表已存在，跳过注入");
+    logger.debug(MODULE, "stylesheet already exists, skipping injection");
   }
 
   // ---- state sync ----
-  logger.info(MODULE, "初始化状态同步");
+  logger.info(MODULE, "initializing status sync");
   function renderStatus(s: string) {
-    logger.debug(MODULE, `renderStatus() 状态变更: ${s}`);
+    logger.debug(MODULE, `renderStatus() status changed: ${s}`);
     badge.className = "orui-badge orui-" + pos + " orui-" + s;
     label.textContent = s;
   }
   const initialStatus = wsClient.getStatus();
-  logger.debug(MODULE, `初始状态: ${initialStatus}`);
+  logger.debug(MODULE, `initial status: ${initialStatus}`);
   renderStatus(initialStatus);
-  logger.debug(MODULE, "注册状态变更监听器");
+  logger.debug(MODULE, "registering status change listener");
   wsClient.onStatusChange(renderStatus);
 
   function positionPanel() {
@@ -240,39 +240,39 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
     const gap = 6;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    logger.debug(MODULE, `计算面板位置: 徽章=${br.left},${br.top} 面板尺寸=${pr.width}x${pr.height}`);
+    logger.debug(MODULE, `calculating panel position: badge=${br.left},${br.top} panel size=${pr.width}x${pr.height}`);
     // Score each side by available space, pick the one that fits best
     const sides: { score: number; top: number; left: number }[] = [];
     // above
     if (br.top - gap >= pr.height) {
       sides.push({ score: br.top, top: br.top - gap - pr.height, left: br.left + br.width / 2 - pr.width / 2 });
-      logger.debug(MODULE, "面板可放置在上方");
+      logger.debug(MODULE, "panel can be placed above");
     }
     // below
     if (vh - br.bottom - gap >= pr.height) {
       sides.push({ score: vh - br.bottom, top: br.bottom + gap, left: br.left + br.width / 2 - pr.width / 2 });
-      logger.debug(MODULE, "面板可放置在下方");
+      logger.debug(MODULE, "panel can be placed below");
     }
     // right
     if (vw - br.right - gap >= pr.width) {
       sides.push({ score: vw - br.right, top: br.top + br.height / 2 - pr.height / 2, left: br.right + gap });
-      logger.debug(MODULE, "面板可放置在右侧");
+      logger.debug(MODULE, "panel can be placed on the right");
     }
     // left
     if (br.left - gap >= pr.width) {
       sides.push({ score: br.left, top: br.top + br.height / 2 - pr.height / 2, left: br.left - gap - pr.width });
-      logger.debug(MODULE, "面板可放置在左侧");
+      logger.debug(MODULE, "panel can be placed on the left");
     }
     if (sides.length > 0) {
       const best = sides.reduce((a, b) => a.score >= b.score ? a : b);
       panel.style.left = Math.max(gap, Math.min(vw - pr.width - gap, best.left)) + "px";
       panel.style.top = Math.max(gap, Math.min(vh - pr.height - gap, best.top)) + "px";
-      logger.debug(MODULE, `面板位置确定: left=${panel.style.left}, top=${panel.style.top}`);
+      logger.debug(MODULE, `panel position set: left=${panel.style.left}, top=${panel.style.top}`);
     } else {
       // If no side fits, center in viewport
       panel.style.left = Math.max(gap, (vw - pr.width) / 2) + "px";
       panel.style.top = Math.max(gap, (vh - pr.height) / 2) + "px";
-      logger.debug(MODULE, "面板居中显示");
+      logger.debug(MODULE, "panel centered");
     }
   }
 
@@ -280,13 +280,13 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
     logger.debug(MODULE, `renderPanel() showDebug=${showDebug}`);
     if (!showDebug) { panel.style.display = "none"; return; }
     const stats = wsClient.getStats();
-    logger.debug(MODULE, `获取统计信息: status=${stats.status}, latency=${stats.latency}, connects=${stats.connectCount}`);
+    logger.debug(MODULE, `fetching stats: status=${stats.status}, latency=${stats.latency}, connects=${stats.connectCount}`);
     const statusClass =
       stats.status === "connected" ? "orui-ok"
       : stats.status === "connecting" ? "orui-warn"
       : "orui-bad";
     const logs = stats.logs.slice(-20).join("\n");
-    logger.debug(MODULE, `渲染面板，日志条数: ${logs.split('\n').length}`);
+    logger.debug(MODULE, `rendering panel, log lines: ${logs.split('\n').length}`);
     panel.innerHTML = `
       <div class="orui-title">Remote UI Debug Info</div>
       <table>
@@ -304,13 +304,13 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
     const copyBtn = panel.querySelector(".orui-copy-btn");
     if (copyBtn) {
       copyBtn.addEventListener("click", (e) => {
-        logger.info(MODULE, "复制按钮被点击");
+        logger.info(MODULE, "copy button clicked");
         e.stopPropagation();
         const fullLogs = wsClient.getStats().logs.join("\n");
         navigator.clipboard.writeText(fullLogs).then(() => {
-          logger.info(MODULE, `日志已复制到剪贴板，共 ${fullLogs.split('\n').length} 行`);
+          logger.info(MODULE, `logs copied to clipboard, ${fullLogs.split('\n').length} lines`);
         }).catch((err) => {
-          logger.error(MODULE, `复制失败: ${err}`);
+          logger.error(MODULE, `copy failed: ${err}`);
         });
       });
     }
@@ -318,25 +318,25 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   }
 
   // ---- drag ----
-  logger.debug(MODULE, "初始化拖拽状态变量");
+  logger.debug(MODULE, "initializing drag state variables");
   let drag: { startX: number; startY: number; offsetX: number; offsetY: number; moved: boolean } | null = null;
 
   function onPointerDown(e: PointerEvent) {
-    logger.debug(MODULE, `onPointerDown() 触发，button=${e.button}, pointerId=${e.pointerId}`);
+    logger.debug(MODULE, `onPointerDown() fired, button=${e.button}, pointerId=${e.pointerId}`);
     if (e.button !== 0) {
-      logger.debug(MODULE, "非左键点击，忽略");
+      logger.debug(MODULE, "non-left click, ignoring");
       return;
     }
     const rect = badge.getBoundingClientRect();
-    logger.debug(MODULE, `徽章位置: left=${rect.left}, top=${rect.top}, width=${rect.width}, height=${rect.height}`);
+    logger.debug(MODULE, `badge position: left=${rect.left}, top=${rect.top}, width=${rect.width}, height=${rect.height}`);
     drag = {
       startX: e.clientX, startY: e.clientY,
       offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top,
       moved: false,
     };
-    logger.debug(MODULE, `拖拽开始: startX=${drag.startX}, startY=${drag.startY}, offsetX=${drag.offsetX}, offsetY=${drag.offsetY}`);
+    logger.debug(MODULE, `drag start: startX=${drag.startX}, startY=${drag.startY}, offsetX=${drag.offsetX}, offsetY=${drag.offsetY}`);
     badge.setPointerCapture(e.pointerId);
-    logger.debug(MODULE, "指针捕获已设置");
+    logger.debug(MODULE, "pointer capture set");
   }
 
   function onPointerMove(e: PointerEvent) {
@@ -345,7 +345,7 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
     const dy = e.clientY - drag.startY;
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
       if (!drag.moved) {
-        logger.debug(MODULE, `拖拽移动超过阈值: dx=${dx}, dy=${dy}`);
+        logger.debug(MODULE, `drag movement exceeded threshold: dx=${dx}, dy=${dy}`);
         drag.moved = true;
       }
     }
@@ -357,61 +357,61 @@ export function initFloatingBadge(options?: FloatingBadgeOptions): () => void {
   }
 
   function onPointerUp(e: PointerEvent) {
-    logger.debug(MODULE, `onPointerUp() 触发，pointerId=${e.pointerId}`);
+    logger.debug(MODULE, `onPointerUp() fired, pointerId=${e.pointerId}`);
     if (!drag) return;
     badge.releasePointerCapture(e.pointerId);
-    logger.debug(MODULE, "指针捕获已释放");
+    logger.debug(MODULE, "pointer capture released");
     if (!drag.moved) {
-      logger.info(MODULE, "检测到点击（非拖拽），切换调试面板显示");
+      logger.info(MODULE, "click detected (not drag), toggling debug panel");
       showDebug = !showDebug;
       if (showDebug) {
-        logger.info(MODULE, "调试面板已打开");
+        logger.info(MODULE, "debug panel opened");
         renderPanel();
         statsTimer = setInterval(renderPanel, 2000);
-        logger.debug(MODULE, "已启动定时刷新（每 2 秒）");
+        logger.debug(MODULE, "started periodic refresh (every 2s)");
       } else {
-        logger.info(MODULE, "调试面板已关闭");
+        logger.info(MODULE, "debug panel closed");
         panel.style.display = "none";
         if (statsTimer) {
           clearInterval(statsTimer);
           statsTimer = null;
-          logger.debug(MODULE, "已停止定时刷新");
+          logger.debug(MODULE, "stopped periodic refresh");
         }
       }
     } else {
-      logger.debug(MODULE, "拖拽操作完成");
+      logger.debug(MODULE, "drag operation completed");
     }
     drag = null;
   }
 
-  logger.debug(MODULE, "注册拖拽事件监听器");
+  logger.debug(MODULE, "registering drag event listeners");
   badge.addEventListener("pointerdown", onPointerDown);
   badge.addEventListener("pointermove", onPointerMove);
   badge.addEventListener("pointerup", onPointerUp);
 
   if (options?.visible === false) {
-    logger.info(MODULE, "徽章初始设置为隐藏");
+    logger.info(MODULE, "badge initially hidden");
     badge.style.display = "none";
   } else {
-    logger.info(MODULE, "徽章初始设置为可见");
+    logger.info(MODULE, "badge initially visible");
   }
 
   // ---- destroy ----
   cleanupFloatingBadge = () => {
-    logger.info(MODULE, "执行徽章清理函数");
+    logger.info(MODULE, "executing badge cleanup function");
     badge.removeEventListener("pointerdown", onPointerDown);
     badge.removeEventListener("pointermove", onPointerMove);
     badge.removeEventListener("pointerup", onPointerUp);
     if (statsTimer) {
       clearInterval(statsTimer);
-      logger.debug(MODULE, "已清理定时刷新");
+      logger.debug(MODULE, "periodic refresh cleaned up");
     }
     badge.remove();
-    logger.debug(MODULE, "徽章元素已从 DOM 移除");
+    logger.debug(MODULE, "badge element removed from DOM");
     cleanupFloatingBadge = null;
   };
-  logger.info(MODULE, "=== initFloatingBadge() 初始化完成 ===");
+  logger.info(MODULE, "=== initFloatingBadge() initialization complete ===");
   return cleanupFloatingBadge;
 }
 
-logger.info(MODULE, "=== 模块加载完成 ===");
+logger.info(MODULE, "=== module loading complete ===");

@@ -2,10 +2,11 @@
 // Copyright (c) 2025 DraviaVemal
 // See LICENSE file in the root directory.
 
-use crate::{log_error, log_info, log_warn, RpcServer};
+use crate::{log_error, log_info, log_warn, CommandRegistry, RpcServer};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::json;
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{plugin::PluginApi, AppHandle, Error, Listener, Manager, Runtime};
 use tokio::sync::RwLock;
 
@@ -47,6 +48,21 @@ impl RemoteUi {
         self.rpc_server.get_is_active()
     }
 
+    /// Send a JSON response over WebSocket
+    #[cfg(feature = "ws")]
+    fn send_ws_response(
+        session: &Arc<Mutex<SplitSink<WebSocketStream<TokioIo<Upgraded>>, Message>>>,
+        response: serde_json::Value,
+    ) {
+        let session = session.clone();
+        tauri::async_runtime::spawn(async move {
+            let msg = serde_json::to_string(&response).unwrap();
+            if let Err(e) = session.lock().await.send(Message::text(msg)).await {
+                log_error!("send_ws_response", format!("Failed to send WS response: {:?}", e));
+            }
+        });
+    }
+
     #[cfg(feature = "ws")]
     pub(crate) fn invoke_rpc(
         &self,
@@ -56,46 +72,62 @@ impl RemoteUi {
         let ws_payload: WsPayload = serde_json::from_str(&payload)?;
         log_info!("invoke_rpc", format!("Received RPC request: cmd={}, id={}, args={:?}",
             ws_payload.cmd, ws_payload.id, ws_payload.args));
+
+        // Try command registry first — no WebView needed
+        if let Some(registry) = self.app.try_state::<CommandRegistry>() {
+            if let Some(result) = registry.dispatch(&ws_payload.cmd, ws_payload.args.clone()) {
+                log_info!("invoke_rpc", format!("Command dispatched via registry: cmd={}, id={}", ws_payload.cmd, ws_payload.id));
+                let response = match result {
+                    Ok(value) => {
+                        let inner = json!({"status": "success", "payload": value});
+                        json!({"id": ws_payload.id, "payload": inner.to_string()})
+                    }
+                    Err(err) => {
+                        let inner = json!({"status": "error", "payload": err});
+                        json!({"id": ws_payload.id, "payload": inner.to_string()})
+                    }
+                };
+                Self::send_ws_response(&session, response);
+                return Ok(());
+            }
+        }
+
+        // Fall back to WebView eval path
         let window = match self.app.get_webview_window("main") {
             Some(w) => w,
             None => {
                 log_warn!("invoke_rpc", "No main webview window (headless mode), sending error response");
-                let err_msg = json!({"id":ws_payload.id,"payload":"{\"error\":\"WebviewWindow Not Found (headless mode)\"}"}).to_string();
-                let session_clone = session.clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = session_clone.lock().await.send(Message::text(err_msg)).await {
-                        log_error!("invoke_rpc", format!("Failed to send error response: {:?}", e));
-                    }
-                });
+                let inner = json!({"error": "WebviewWindow Not Found (headless mode) and command not found in registry"});
+                let response = json!({"id": ws_payload.id, "payload": inner.to_string()});
+                Self::send_ws_response(&session, response);
                 return Ok(());
             }
         };
         let req_unique_id = format!("remote-ui::result::{}", &ws_payload.id);
+        let timeout_id = ws_payload.id;
         log_info!("invoke_rpc", format!("Registering one-shot event listener: event_id={}", req_unique_id));
+
+        // Timeout safety net — prevents hanging if the eval'd JS never fires
+        let timeout_session = session.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            let err_inner = json!({"status": "error", "payload": "invoke timed out after 30s"});
+            let err_response = json!({"id": timeout_id, "payload": err_inner.to_string()});
+            let msg = serde_json::to_string(&err_response).unwrap();
+            let _ = timeout_session.lock().await.send(Message::text(msg)).await;
+        });
+
         self.app
             .app_handle()
             .once_any(&req_unique_id, move |handler| {
-                // Spawn a new task to send the message asynchronously
                 let payload = handler.payload().to_string();
                 let id = ws_payload.id;
                 log_info!("invoke_rpc::callback", format!("Tauri IPC returned, id={}, payload size={} bytes, starting WS send task", id, payload.len()));
+                let session = session.clone();
                 tauri::async_runtime::spawn(async move {
-                    log_info!("invoke_rpc::send_task", format!("Preparing to send RPC result over WS, id={}", id));
                     let json_msg = json!({"id":id,"payload":payload}).to_string();
-                    log_info!("invoke_rpc::send_task", format!("Serialized JSON message ({} bytes): id={}", json_msg.len(), id));
-                    match session
-                        .lock()
-                        .await
-                        .send(Message::text(json_msg))
-                        .await
-                    {
-                        Ok(_) => {
-                            log_info!("invoke_rpc::send_task", format!("RPC result sent successfully, id={}", id));
-                        }
-                        Err(err) => {
-                            log_error!("invoke_rpc::send_task", format!("WS send failed! id={}, error={:?}, msg={}", id, err, err));
-                            log_error!("invoke_rpc::send_task", "This may be due to WS connection closing before send completes (race condition)");
-                        }
+                    if let Err(e) = session.lock().await.send(Message::text(json_msg)).await {
+                        log_error!("invoke_rpc::send_task", format!("WS send failed! id={}, error={:?}", id, e));
                     }
                 });
             });

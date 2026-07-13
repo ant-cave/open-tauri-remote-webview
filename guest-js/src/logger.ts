@@ -28,7 +28,7 @@ let enabled = true;
  */
 export function setLogLevel(level: LogLevel): void {
   currentLevel = level;
-  console.log(`[Logger] 日志级别已设置为: ${level}`);
+  console.log(`[Logger] log level set to: ${level}`);
 }
 
 /**
@@ -36,7 +36,7 @@ export function setLogLevel(level: LogLevel): void {
  */
 export function setLogEnabled(value: boolean): void {
   enabled = value;
-  console.log(`[Logger] 日志已${value ? "启用" : "禁用"}`);
+  console.log(`[Logger] logging ${value ? "enabled" : "disabled"}`);
 }
 
 /**
@@ -117,5 +117,5 @@ export function traceReturn(module: string, fnName: string, result?: unknown): v
  * 记录错误
  */
 export function traceError(module: string, fnName: string, err: unknown): void {
-  error(module, `!!! ${fnName}() 失败:`, err);
+  error(module, `!!! ${fnName}() failed:`, err);
 }
