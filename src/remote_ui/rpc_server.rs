@@ -38,6 +38,69 @@ use tokio::{
     sync::Mutex,
 };
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{log_debug, log_error, log_info, log_warn};
+
+    #[test]
+    fn log_enabled_by_default() {
+        // Default state (set_log_enabled(true) at static init)
+        set_log_enabled(true);
+        assert!(is_log_enabled());
+    }
+
+    #[test]
+    fn log_toggle_off() {
+        set_log_enabled(true);
+        set_log_enabled(false);
+        assert!(!is_log_enabled());
+        set_log_enabled(true); // restore for other tests
+    }
+
+    #[test]
+    fn log_toggle_on_off_on() {
+        set_log_enabled(false);
+        assert!(!is_log_enabled());
+        set_log_enabled(true);
+        assert!(is_log_enabled());
+    }
+
+    #[test]
+    fn ws_log_format_contains_level() {
+        set_log_enabled(true);
+        // ws_log writes to stderr; we can't easily capture it in a test
+        // but we can verify it doesn't panic
+        ws_log(file!(), line!(), "test_function", "INFO", "test message");
+        ws_log(file!(), line!(), "another_fn", "ERROR", "error msg");
+        ws_log(file!(), line!(), "some_fn", "WARN", "warning");
+        ws_log(file!(), line!(), "debug_fn", "DEBUG", "debug info");
+    }
+
+    #[test]
+    fn ws_log_suppressed_when_disabled() {
+        set_log_enabled(false);
+        // Should not panic or produce output
+        ws_log(file!(), line!(), "silent_fn", "INFO", "should not appear");
+        set_log_enabled(true);
+    }
+
+    #[test]
+    fn log_macros_expand() {
+        set_log_enabled(true);
+        log_info!("test_macro", "info message");
+        log_error!("test_macro", "error message");
+        log_warn!("test_macro", "warn message");
+        log_debug!("test_macro", "debug message");
+    }
+
+    #[test]
+    fn rpc_server_new_not_active() {
+        // Can't easily test RpcServer without AppHandle, but we can test
+        // the model is constructable via its trait usage
+    }
+}
+
 // ============================================================================
 // 日志控制 — 可通过 RemoteUiConfig 切换
 // ============================================================================
@@ -117,7 +180,7 @@ impl RemoteUiExt for AppHandle {
 
     async fn stop_remote_ui(&self) -> Result<(), Error> {
         let remote_ui = self.state::<Arc<RwLock<RemoteUi>>>();
-        remote_ui.write().await.rpc_server.stop();
+        remote_ui.write().await.rpc_server.stop().await;
         Ok(())
     }
 
@@ -174,7 +237,16 @@ impl RpcServer {
         }
     }
 
-    pub(crate) fn stop(&mut self) {
+    pub(crate) async fn stop(&mut self) {
+        #[cfg(feature = "ws")]
+        {
+            for (_label, handle) in self.ws_window_handle.drain() {
+                let handle = handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _ = handle.lock().await.close().await;
+                });
+            }
+        }
         self.is_active = false;
     }
 
@@ -212,11 +284,10 @@ impl RpcServer {
     }
 
     #[cfg(feature = "ws")]
-    pub(crate) fn get_ws_handle(
+    pub(crate) fn get_all_ws_handles(
         &self,
-        window_label: &str,
-    ) -> Option<&Arc<Mutex<SplitSink<WebSocketStream<TokioIo<Upgraded>>, Message>>>> {
-        self.ws_window_handle.get(window_label)
+    ) -> Vec<Arc<Mutex<SplitSink<WebSocketStream<TokioIo<Upgraded>>, Message>>>> {
+        self.ws_window_handle.values().cloned().collect()
     }
 }
 

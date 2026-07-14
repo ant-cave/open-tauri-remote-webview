@@ -136,3 +136,231 @@ impl From<&str> for RpcResponseStatus {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── OriginType ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn origin_type_localhost_to_str() {
+        let s: &str = OriginType::Localhost.into();
+        assert_eq!(s, "127.0.0.1");
+    }
+
+    #[test]
+    fn origin_type_direct_to_str() {
+        let s: &str = OriginType::Direct.into();
+        assert_eq!(s, "::");
+    }
+
+    #[test]
+    fn origin_type_any_to_str() {
+        let s: &str = OriginType::Any.into();
+        assert_eq!(s, "0.0.0.0");
+    }
+
+    // ── RemoteUiConfig ──────────────────────────────────────────────────────
+
+    #[test]
+    fn config_default_values() {
+        let cfg = RemoteUiConfig::default();
+        assert!(matches!(cfg.allowed_origin, OriginType::Localhost));
+        assert!(cfg.port.is_none());
+        assert!(cfg.enable_log);
+    }
+
+    #[test]
+    fn config_enable_log() {
+        let cfg = RemoteUiConfig::default().enable_log();
+        assert!(cfg.enable_log);
+    }
+
+    #[test]
+    fn config_disable_log() {
+        let cfg = RemoteUiConfig::default().disable_log();
+        assert!(!cfg.enable_log);
+    }
+
+    #[test]
+    fn config_set_allowed_origin() {
+        let cfg = RemoteUiConfig::default().set_allowed_origin(OriginType::Any);
+        assert!(matches!(cfg.allowed_origin, OriginType::Any));
+        let cfg = cfg.set_allowed_origin(OriginType::Direct);
+        assert!(matches!(cfg.allowed_origin, OriginType::Direct));
+    }
+
+    #[test]
+    fn config_set_port_some() {
+        let cfg = RemoteUiConfig::default().set_port(Some(9090));
+        assert_eq!(cfg.port, Some(9090));
+    }
+
+    #[test]
+    fn config_set_port_none() {
+        let cfg = RemoteUiConfig::default().set_port(Some(8080)).set_port(None);
+        assert!(cfg.port.is_none());
+    }
+
+    #[test]
+    fn config_getters() {
+        let cfg = RemoteUiConfig::default()
+            .set_allowed_origin(OriginType::Any)
+            .set_port(Some(9090));
+        assert!(matches!(cfg.get_allowed_origin(), OriginType::Any));
+        assert_eq!(cfg.get_port(), Some(9090));
+    }
+
+    #[test]
+    fn config_builder_chain() {
+        let cfg = RemoteUiConfig::default()
+            .set_port(Some(9090))
+            .set_allowed_origin(OriginType::Direct)
+            .disable_log();
+        assert_eq!(cfg.get_port(), Some(9090));
+        assert!(matches!(cfg.get_allowed_origin(), OriginType::Direct));
+        assert!(!cfg.enable_log);
+    }
+
+    // ── RpcResponseStatus ──────────────────────────────────────────────────
+
+    #[test]
+    fn rpc_status_success_to_str() {
+        let s: &str = RpcResponseStatus::Success.into();
+        assert_eq!(s, "success");
+    }
+
+    #[test]
+    fn rpc_status_error_to_str() {
+        let s: &str = RpcResponseStatus::Error.into();
+        assert_eq!(s, "error");
+    }
+
+    #[test]
+    fn rpc_status_invalid_to_str() {
+        let s: &str = RpcResponseStatus::Invalid.into();
+        assert_eq!(s, "invalid");
+    }
+
+    #[test]
+    fn rpc_status_from_str_success() {
+        let status: RpcResponseStatus = "success".into();
+        assert!(matches!(status, RpcResponseStatus::Success));
+    }
+
+    #[test]
+    fn rpc_status_from_str_error() {
+        let status: RpcResponseStatus = "error".into();
+        assert!(matches!(status, RpcResponseStatus::Error));
+    }
+
+    #[test]
+    fn rpc_status_from_str_unknown_defaults_to_invalid() {
+        let status: RpcResponseStatus = "unknown".into();
+        assert!(matches!(status, RpcResponseStatus::Invalid));
+    }
+
+    #[test]
+    fn rpc_status_roundtrip() {
+        for (input, expected_str, expected_variant) in [
+            (RpcResponseStatus::Success, "success", RpcResponseStatus::Success),
+            (RpcResponseStatus::Error, "error", RpcResponseStatus::Error),
+            (RpcResponseStatus::Invalid, "invalid", RpcResponseStatus::Invalid),
+        ] {
+            let s: &str = input.into();
+            assert_eq!(s, expected_str);
+            let back: RpcResponseStatus = s.into();
+            assert!(std::mem::discriminant(&back) == std::mem::discriminant(&expected_variant));
+        }
+    }
+
+    // ── WsPayload ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn ws_payload_deserialize_full() {
+        let json = r#"{"id": 42, "cmd": "my_command", "args": {"key": "value"}, "option": {"opt": true}}"#;
+        let payload: WsPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.id, 42);
+        assert_eq!(payload.cmd, "my_command");
+        assert_eq!(payload.args, Some(serde_json::json!({"key": "value"})));
+        assert_eq!(payload.option, Some(serde_json::json!({"opt": true})));
+    }
+
+    #[test]
+    fn ws_payload_deserialize_null_args() {
+        let json = r#"{"id": 1, "cmd": "no_args", "args": null, "option": null}"#;
+        let payload: WsPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.id, 1);
+        assert_eq!(payload.cmd, "no_args");
+        assert_eq!(payload.args, None);
+        assert_eq!(payload.option, None);
+    }
+
+    #[test]
+    fn ws_payload_deserialize_missing_option() {
+        let json = r#"{"id": 7, "cmd": "test", "args": [1, 2, 3]}"#;
+        let payload: WsPayload = serde_json::from_str(json).unwrap();
+        assert_eq!(payload.id, 7);
+        assert_eq!(payload.cmd, "test");
+        assert_eq!(payload.args, Some(serde_json::json!([1, 2, 3])));
+        assert!(payload.option.is_none());
+    }
+
+    // ── RemoteUiEvent ──────────────────────────────────────────────────────
+
+    #[test]
+    fn remote_ui_event_serialize() {
+        let event = RemoteUiEvent {
+            event_name: "test_event".into(),
+            window_label: Some("main".into()),
+            payload: serde_json::json!({"key": 42}),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("test_event"));
+        assert!(json.contains("main"));
+        assert!(json.contains("42"));
+    }
+
+    #[test]
+    fn remote_ui_event_serialize_no_window() {
+        let event = RemoteUiEvent {
+            event_name: "no_window".into(),
+            window_label: None,
+            payload: "simple".to_string(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        assert!(json.contains("no_window"));
+        assert!(!json.contains("windowLabel"));
+    }
+
+    // ── EmitRequest / EmitResponse ─────────────────────────────────────────
+
+    #[test]
+    fn emit_request_deserialize_some() {
+        let json = r#"{"value": "hello"}"#;
+        let req: EmitRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.value, Some("hello".into()));
+    }
+
+    #[test]
+    fn emit_request_deserialize_null() {
+        let json = r#"{"value": null}"#;
+        let req: EmitRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(req.value, None);
+    }
+
+    #[test]
+    fn emit_response_default() {
+        let resp = EmitResponse::default();
+        assert_eq!(resp.value, None);
+    }
+
+    #[test]
+    fn emit_response_roundtrip() {
+        let resp = EmitResponse { value: Some("ok".into()) };
+        let json = serde_json::to_string(&resp).unwrap();
+        let back: EmitResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.value, Some("ok".into()));
+    }
+}

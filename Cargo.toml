@@ -2,6 +2,7 @@
 edition = "2021"
 rust-version = "1.77.2"
 name = "open-tauri-remote-webview"
+links = "open-tauri-remote-webview"
 version = "0.0.6-alpha.2"
 authors = ["DraviaVemal"]
 build = "build.rs"

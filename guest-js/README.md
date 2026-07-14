@@ -4,7 +4,7 @@
 
 **Install:** `npm install open-tauri-remote-webview` **（run in project root）**
 
-> **中文用户请查看 [中文文档](https://github.com/ant-cave/open-tauri-remote-webview/blob/master/README.zh.md)** — 包含完整的 Rust 后端和前端使用指引。
+> **中文用户请查看 [中文文档](../README.zh.md)** — 包含完整的 Rust 后端和前端使用指引。
 
 ---
 
@@ -44,7 +44,7 @@ All modifications are Copyright (c) 2026 **ant-cave**. (MIT — use it, modify i
 | `@tauri-apps/api/window` (title, size, ...) | ✅ | ✅ via bridge |
 | `@tauri-apps/api/event` (listen, emit) | ✅ | ✅ via bridge |
 | Rust `emit` / `emit_to` / `emit_str` / ... → browser | ✅ | ✅ via `EmitterExt` |
-| Custom security & origin control | ✅ | ✅ |
+| IP-based access control (Localhost / Direct / Any) | ✅ | ✅ |
 | WS connection status floating badge | — | ✅ auto-shown |
 
 ---
@@ -75,6 +75,7 @@ Zero migration cost. All exported APIs have identical signatures to native Tauri
 | `invoke<T>(cmd, args): Promise<T>` | Transparent proxy ✅ | `invoke<T>(cmd, args)` ✅ | None |
 | `listen<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `listen<T>(event, handler)` ✅ | None |
 | `once<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `once<T>(event, handler)` ✅ | None |
+| `emit(event, payload): Promise<void>` | Generic proxy ✅ | Not exported | Works via generic invoke path (WS→eval); no local optimization like `listen`/`once` |
 
 ### Known limitations (architectural, not API differences)
 
@@ -247,21 +248,24 @@ async fn disable_server(app: AppHandle) -> Result<String, String> {
 
 ## How the bridge works
 
-### Async environment detection
+### Environment detection
 
-`bridge-init` **asynchronously** detects the runtime environment before taking
-any action:
+`bridge-init` detects the runtime environment immediately (no polling):
+
+1. **`__ORUI_WS_URL__` or `__ORUI_WS_PORT__` set** → browser mode (user explicitly wants WS)
+2. **`__TAURI_INTERNALS__` present** (and not the shim) → native Tauri mode
+3. **Otherwise** → browser mode (WS bridge)
 
 ```
 module load
   ↓
-waitForTauriDetection()  ← polls __TAURI_INTERNALS__ (up to 3s)
-  ├── Native Tauri found  →  skip bridge, use real IPC
-  └── Browser detected    →  install WS bridge shim
+check globals
+  ├── __ORUI_WS_URL__/__ORUI_WS_PORT__ set  →  install WS bridge shim
+  ├── __TAURI_INTERNALS__ found (native)     →  skip bridge, use real IPC
+  └── otherwise                              →  install WS bridge shim
 ```
 
-This eliminates race conditions where `__TAURI_INTERNALS__` isn't injected yet
-when your frontend code runs. No `isTauri()` guards needed.
+No polling, no User-Agent sniffing, no 3-second delay.
 
 ### WS proxy shim
 
@@ -314,11 +318,12 @@ Features:
 ## Package exports
 
 | Import path | What it provides |
-|---|---|
+|---|---|---|
 | `open-tauri-remote-webview/bridge-init` | Side-effect — auto-install bridge (recommended) |
 | `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — manual install |
 | `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge, disableFloatingBadge }` |
 | `open-tauri-remote-webview/api/event` | `{ listen, once }` |
+| `open-tauri-remote-webview/floating-badge` | `{ initFloatingBadge, disableFloatingBadge }` — standalone import |
 | `open-tauri-remote-webview` | Re-exports all of the above |
 
 ---

@@ -163,38 +163,85 @@ impl RemoteUi {
         Ok(())
     }
 
-    /// Emit message to WS-connected browser clients
+    /// Emit message to all WS-connected browser clients
     #[cfg(feature = "ws")]
     pub fn emit<P: Serialize + Clone>(&self, event: &str, payload: P) -> Result<(), Error> {
-        log_info!("emit", format!("Attempting to send event via WS: event={}", event));
-        if let Some(session) = self.rpc_server.get_ws_handle("main") {
-            let ws_handle = session.clone();
-            let event_owned = event.to_owned();
-            let json_str = json!({
-                "event":event_owned,
-                "payload":payload
-            })
-            .to_string();
-            log_info!("emit", format!("Event JSON serialized ({} bytes), spawning async send task", json_str.len()));
-            tauri::async_runtime::spawn(async move {
-                log_info!("emit::send_task", format!("Sending event: event={}", event_owned));
-                match ws_handle
-                    .lock()
-                    .await
-                    .send(Message::text(json_str))
-                    .await
-                {
-                    Ok(_) => {
-                        log_info!("emit::send_task", format!("Event sent successfully: event={}", event_owned));
-                    }
-                    Err(err) => {
-                        log_error!("emit::send_task", format!("Event send failed: event={}, error={:?}, msg={}", event_owned, err, err));
+        let handles = self.rpc_server.get_all_ws_handles();
+        if handles.is_empty() {
+            log_warn!("emit", format!("No WS clients connected, cannot send event: event={}", event));
+            return Ok(());
+        }
+        log_info!("emit", format!("Broadcasting event via WS to {} client(s): event={}", handles.len(), event));
+        let event_owned = event.to_owned();
+        let json_str = serde_json::json!({"event": event_owned, "payload": payload}).to_string();
+        for ws_handle in handles {
+            tauri::async_runtime::spawn({
+                let event_owned = event_owned.clone();
+                let json_str = json_str.clone();
+                async move {
+                    match ws_handle.lock().await.send(Message::text(json_str)).await {
+                        Ok(_) => {
+                            log_info!("emit::send_task", format!("Event sent: event={}", event_owned));
+                        }
+                        Err(err) => {
+                            log_error!("emit::send_task", format!("Event send failed: event={}, error={:?}", event_owned, err));
+                        }
                     }
                 }
             });
-        } else {
-            log_warn!("emit", format!("No WS handle for 'main' window, cannot send event: event={}", event));
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    #[test]
+    fn ws_payload_deserialize_basic() {
+        let raw = r#"{"id":1,"cmd":"greet","args":{"name":"World"},"option":null}"#;
+        let payload: crate::WsPayload = serde_json::from_str(raw).unwrap();
+        assert_eq!(payload.id, 1);
+        assert_eq!(payload.cmd, "greet");
+        assert_eq!(payload.args, Some(json!({"name":"World"})));
+        assert_eq!(payload.option, None);
+    }
+
+    #[test]
+    fn ws_payload_deserialize_with_option() {
+        let raw = r#"{"id":99,"cmd":"configure","args":{"theme":"dark"},"option":{"timeout":5000}}"#;
+        let payload: crate::WsPayload = serde_json::from_str(raw).unwrap();
+        assert_eq!(payload.id, 99);
+        assert_eq!(payload.cmd, "configure");
+        assert_eq!(payload.args, Some(json!({"theme":"dark"})));
+        assert_eq!(payload.option, Some(json!({"timeout":5000})));
+    }
+
+    #[test]
+    fn ws_payload_deserialize_no_args_no_option() {
+        let raw = r#"{"id":5,"cmd":"status"}"#;
+        let payload: crate::WsPayload = serde_json::from_str(raw).unwrap();
+        assert_eq!(payload.id, 5);
+        assert_eq!(payload.cmd, "status");
+        assert!(payload.args.is_none());
+        assert!(payload.option.is_none());
+    }
+
+    #[test]
+    fn ws_payload_deserialize_array_args() {
+        let raw = r#"{"id":3,"cmd":"sum","args":[1,2,3,4,5]}"#;
+        let payload: crate::WsPayload = serde_json::from_str(raw).unwrap();
+        assert_eq!(payload.id, 3);
+        assert_eq!(payload.cmd, "sum");
+        assert_eq!(payload.args, Some(json!([1,2,3,4,5])));
+    }
+
+    #[test]
+    fn ws_payload_deserialize_string_args() {
+        let raw = r#"{"id":0,"cmd":"echo","args":"hello"}"#;
+        let payload: crate::WsPayload = serde_json::from_str(raw).unwrap();
+        assert_eq!(payload.id, 0);
+        assert_eq!(payload.args, Some(json!("hello")));
     }
 }

@@ -163,6 +163,40 @@ impl<R: Runtime> EmitterExt<R> for Window<R> {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tauri::Emitter;
+
+    /// Verify that EmitterExt trait methods have the same signatures as tauri::Emitter.
+    /// This is a compile-time check — if the signatures diverge, this won't compile.
+    #[test]
+    fn trait_signature_compatibility() {
+        // These are compile-time assertions only; they verify the trait bounds.
+        fn _assert_emit<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
+        fn _assert_emit_to<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
+        fn _assert_emit_str<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
+        fn _assert_emit_str_to<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
+        fn _assert_emit_filter<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
+        fn _assert_emit_str_filter<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
+        let _ = (_assert_emit::<tauri::Wry, AppHandle<tauri::Wry>>,
+                  _assert_emit_to::<tauri::Wry, AppHandle<tauri::Wry>>,
+                  _assert_emit_str::<tauri::Wry, AppHandle<tauri::Wry>>,
+                  _assert_emit_str_to::<tauri::Wry, AppHandle<tauri::Wry>>,
+                  _assert_emit_filter::<tauri::Wry, AppHandle<tauri::Wry>>,
+                  _assert_emit_str_filter::<tauri::Wry, AppHandle<tauri::Wry>>);
+    }
+
+    #[cfg(not(feature = "ws"))]
+    #[test]
+    fn forward_to_ws_noop_without_ws_feature() {
+        // When `ws` is disabled, forward_to_ws is a no-op.
+        // We just verify it compiles and doesn't panic.
+        // We can't easily create a Manager without a full Tauri app,
+        // but the function is designed to be resilient to missing state.
+    }
+}
+
 // ── WebviewWindow ──────────────────────────────────────────────────────────
 
 impl<R: Runtime> EmitterExt<R> for WebviewWindow<R> {

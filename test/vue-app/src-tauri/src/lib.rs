@@ -234,9 +234,11 @@ async fn disable_server(app: tauri::AppHandle) -> Result<String, String> {
     Ok("Server stopped".to_string())
 }
 
-/// Test double-start error branch
+/// Restart the WebSocket server on a given port (stops first if running)
 #[tauri::command]
 async fn restart_server(app: tauri::AppHandle, port: u16) -> Result<String, String> {
+    app.stop_remote_ui().await.map_err(|e| e.to_string())?;
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     app.start_remote_ui(
         RemoteUiConfig::default()
             .set_port(Some(port))

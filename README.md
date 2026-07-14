@@ -42,7 +42,7 @@ All modifications are Copyright (c) 2026 **ant-cave**.
 | `@tauri-apps/api/window` (title, size, ...) | ✅ | ✅ via bridge |
 | `@tauri-apps/api/event` (listen, emit) | ✅ | ✅ via bridge |
 | Rust `emit` / `emit_to` / `emit_str` / ... → browser | ✅ | ✅ via `EmitterExt` |
-| Custom security & origin control | ✅ | ✅ |
+| IP-based access control (Localhost / Direct / Any) | ✅ | ✅ |
 | WS connection status floating badge | — | ✅ auto-shown |
 
 ---
@@ -73,6 +73,7 @@ Zero migration cost. All exported APIs have identical signatures to native Tauri
 | `invoke<T>(cmd, args): Promise<T>` | Transparent proxy ✅ | `invoke<T>(cmd, args)` ✅ | None |
 | `listen<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `listen<T>(event, handler)` ✅ | None |
 | `once<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `once<T>(event, handler)` ✅ | None |
+| `emit(event, payload): Promise<void>` | Generic proxy ✅ | Not exported | Works via generic invoke path (WS→eval); no local optimization like `listen`/`once` |
 
 ### Known limitations
 
@@ -358,11 +359,12 @@ Features:
 ## Package exports
 
 | Import path | What it provides |
-|---|---|
+|---|---|---|
 | `open-tauri-remote-webview/bridge-init` | Side-effect — auto-install bridge (recommended) |
 | `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — manual install |
 | `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge, disableFloatingBadge }` |
 | `open-tauri-remote-webview/api/event` | `{ listen, once }` |
+| `open-tauri-remote-webview/floating-badge` | `{ initFloatingBadge, disableFloatingBadge }` — standalone import |
 | `open-tauri-remote-webview` | Re-exports all of the above |
 
 ---

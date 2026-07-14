@@ -40,7 +40,7 @@
 | `@tauri-apps/api/window`（title、size 等） | ✅ | ✅ 通过桥接 |
 | `@tauri-apps/api/event`（listen、emit） | ✅ | ✅ 通过桥接 |
 | Rust 端 `emit` / `emit_to` / `emit_str` 等 → 浏览器 | ✅ | ✅ 通过 `EmitterExt` |
-| 安全控制 & 来源限制 | ✅ | ✅ |
+| IP 地址绑定控制（Localhost / Direct / Any） | ✅ | ✅ |
 | WS 连接状态悬浮调试窗 | — | ✅ 自动显示 |
 
 ---
@@ -71,6 +71,7 @@
 | `invoke<T>(cmd, args): Promise<T>` | 透明代理 ✅ | `invoke<T>(cmd, args)` ✅ | 无 |
 | `listen<T>(event, handler): Promise<() => void>` | 透明代理 ✅ | `listen<T>(event, handler)` ✅ | 无 |
 | `once<T>(event, handler): Promise<() => void>` | 透明代理 ✅ | `once<T>(event, handler)` ✅ | 无 |
+| `emit(event, payload): Promise<void>` | 通用代理 ✅ | 未导出 | 走通用 invoke 路径（WS→eval），不像 `listen`/`once` 有本地优化 |
 
 ### 已知限制
 
@@ -351,11 +352,12 @@ disableFloatingBadge();   // 关闭
 ## 包导出
 
 | 导入路径 | 内容 |
-|---|---|
+|---|---|---|
 | `open-tauri-remote-webview/bridge-init` | 副作用模块 — 自动安装桥接（推荐） |
 | `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — 手动安装 |
 | `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge, disableFloatingBadge }` |
 | `open-tauri-remote-webview/api/event` | `{ listen, once }` |
+| `open-tauri-remote-webview/floating-badge` | `{ initFloatingBadge, disableFloatingBadge }` — 独立导入 |
 | `open-tauri-remote-webview` | 重新导出以上所有内容 |
 
 ---
