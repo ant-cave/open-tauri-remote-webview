@@ -2,6 +2,14 @@
 
 让 `#[tauri::command]` 函数无需 WebView 即可通过 WebSocket 调用。
 
+## 安装
+
+```bash
+cargo add open-tauri-remote-webview
+```
+
+`open-tauri-remote-webview-macros` 作为依赖自动安装，无需手动添加。
+
 ## 一句话用法
 
 ```rust
