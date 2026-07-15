@@ -22,7 +22,6 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let func: ItemFn = syn::parse(item.clone()).expect("remote_command: failed to parse function");
     let fn_name = &func.sig.ident;
     let fn_name_str = fn_name.to_string();
-    let vis = &func.vis;
     let attrs = &func.attrs;
     let is_async = func.sig.asyncness.is_some();
     let has_result = returns_result(&func.sig.output);
@@ -36,11 +35,11 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
         .filter_map(|arg| {
             if let FnArg::Typed(pt) = arg {
                 let ts = quote!(#pt.ty).to_string();
-                let skip = ts == "tauri :: AppHandle"
-                    || ts == "AppHandle"
+                let skip = ts.contains("AppHandle")
                     || ts.contains("Webview")
                     || ts.contains("Window")
-                    || ts.starts_with("State ");
+                    || ts.contains("State<")
+                    || ts.contains("State <");
                 if skip {
                     None
                 } else {
@@ -76,7 +75,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
         if is_async {
             quote! {
                 #[doc(hidden)]
-                fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
+                pub fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
@@ -90,7 +89,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
         } else {
             quote! {
                 #[doc(hidden)]
-                fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
+                pub fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
@@ -106,7 +105,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
         if is_async {
             quote! {
                 #[doc(hidden)]
-                fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
+                pub fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
@@ -119,7 +118,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
         } else {
             quote! {
                 #[doc(hidden)]
-                fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
+                pub fn #wrap_ident(args: Option<::serde_json::Value>) -> Result<::serde_json::Value, String> {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
@@ -132,7 +131,11 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     };
 
-    let expanded = quote! { #(#attrs)* #vis #func #wrapper };
+    let filtered_attrs: Vec<_> = attrs.iter().filter(|a| {
+        let path = &a.path();
+        !(path.is_ident("remote_command"))
+    }).collect();
+    let expanded = quote! { #(#filtered_attrs)* #func #wrapper };
     expanded.into()
 }
 
@@ -173,21 +176,42 @@ pub fn register_remote_commands(input: TokenStream) -> TokenStream {
         _ => return quote! {}.into(),
     };
 
-    let mut cmds = Vec::new();
+    let mut raw_paths = Vec::new();
+    let mut current = String::new();
     for tt in group {
-        match tt {
-            proc_macro::TokenTree::Ident(id) => cmds.push(id.to_string()),
-            _ => {}
+        match &tt {
+            proc_macro::TokenTree::Punct(p) if p.as_char() == ',' => {
+                if !current.is_empty() {
+                    raw_paths.push(current.clone());
+                    current.clear();
+                }
+            }
+            _ => {
+                let s = tt.to_string();
+                if s == ":" || s == "," { continue; }
+                current.push_str(&s);
+            }
         }
     }
+    if !current.is_empty() {
+        raw_paths.push(current);
+    }
 
-    let regs: Vec<_> = cmds
-        .iter()
-        .map(|name| {
-            let w = Ident::new(&format!("__orui_wrap__{}", name), Span::call_site());
-            quote! { registry.register(#name, |args| { #w(args) }); }
-        })
-        .collect();
+    let mut uses = Vec::new();
+    let mut regs = Vec::new();
+    for path in &raw_paths {
+        let path_ts: proc_macro2::TokenStream = path.parse().unwrap();
+        let fn_name = path.split("::").last().unwrap_or(path);
+        let w = Ident::new(&format!("__orui_wrap__{}", fn_name), Span::call_site());
+        let mut parts: Vec<&str> = path.split("::").collect();
+        parts.pop();
+        let mod_path = parts.join("::");
+        if !mod_path.is_empty() {
+            let mod_ts: proc_macro2::TokenStream = mod_path.parse().unwrap();
+            uses.push(quote! { use #mod_ts::#w; });
+        }
+        regs.push(quote! { registry.register(#path_ts, |args| { #w(args) }); });
+    }
 
-    quote! { { use tauri::Manager; let registry = app.state::<open_tauri_remote_webview::CommandRegistry>(); #(#regs)* } }.into()
+    quote! { { use tauri::Manager; let registry = app.state::<open_tauri_remote_webview::CommandRegistry>(); #(#uses)* #(#regs)* } }.into()
 }
