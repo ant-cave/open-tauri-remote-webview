@@ -23,7 +23,7 @@
 ## 这不是什么
 
 - **不是远程 WebView 渲染器** — 浏览器看不到 Tauri WebView 的渲染输出。它加载自己的前端副本，通过 WebSocket 通信。
-- **不是真正的无头模式** — 通过 WS 调用的命令目前需要经过原生 WebView 分发。必须存在一个真正的 `WebviewWindow("main")`。通过 `CommandRegistry` API（见下文）可以去掉这一要求。
+- **不是真正的无头模式** — 通过 WS 调用的命令默认需要经过原生 WebView 分发。通过 `#[remote_command]`（见下文）可以直接在 Rust 端分发——无需 WebView。
 - **不是完整的 `@tauri-apps/api` 替代品** — 目前只桥接了 `invoke`、`listen` 和 `once`。`dialog`、`fs`、`shell` 等模块需要自定义命令。
 
 本项目基于 [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0) by [DraviaVemal](https://github.com/DraviaVemal)，在 MIT 协议下修改。所有新增代码 Copyright (c) 2026 **ant-cave**。
@@ -80,7 +80,7 @@
 | **单窗口模式** | `getCurrentWindow()` 始终返回 `label: "main"` | 在命令中使用明确的窗口标签 |
 | **无资产协议** | `convertFileSrc()` 原样返回路径 | 使用原始 URL 访问资产 |
 | **无 `__TAURI__` 环境变量** | 桥接设置 `__TAURI_REMOTE_UI_SHIM__` 标记作为替代 | 检查两者之一 |
-| **`invoke` 需要 WebView** | 未注册的命令需要通过真实的 `WebviewWindow("main")` 分发 | 在 `CommandRegistry` 中注册命令（见下文） |
+| **`invoke` 需要 WebView** | 未注册的命令需要通过真实的 `WebviewWindow("main")` 分发 | 用 `register_remote_commands!` 注册（已解决 ✅） |
 | **未认证的 WS** | WebSocket 端点没有认证机制 | 使用防火墙/网络隔离 |
 | **`@tauri-apps/api/dialog`** | 未桥接 | 通过自定义 Tauri 命令暴露 |
 | **`@tauri-apps/api/fs`** | 未桥接 | 通过自定义 Tauri 命令暴露 |
@@ -111,6 +111,7 @@
 3. **Vite：** 添加 `/remote_ui_ws` 代理（见 [Vite 开发代理](#4-vite-开发代理)）。
 4. **清理代码：** 删除所有 `isTauri()` 分支 —— 桥接自动判断环境。
 5. **推荐：** 将 `use tauri::Emitter` 替换为 `use open_tauri_remote_webview::EmitterExt`，使后端事件也能到达浏览器客户端。
+6. **推荐（无头模式）：** 为命令添加 `#[remote_command]` 并在 `setup()` 中调用 `register_remote_commands!`，使其无需 WebView 即可工作（见[使用方法 > 5. remote_command](#5-remote_command--一键开启无头-websocket-调用推荐)）。
 
 ### 保持不变的部分
 
@@ -228,39 +229,68 @@ server: {
 },
 ```
 
-### 5. CommandRegistry — 无需 WebView 调用 invoke（可选）
+### 5. `#[remote_command]` — 一键开启无头 WebSocket 调用（推荐）
 
-默认情况下，通过 WS 调用的命令需要经过真实的 `WebviewWindow("main")` 通过 `window.eval()` 分发。要消除这一依赖，让命令**无需任何 WebView** 也能工作，可以在 `CommandRegistry` 中注册它们：
+在现有 `#[tauri::command]` 函数上加一个 `#[remote_command]` 属性，然后在 `setup()` 中用 `register_remote_commands!` 注册：
 
 ```rust
-use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
-use serde_json::Value;
+use open_tauri_remote_webview::{remote_command, register_remote_commands};
 
-fn my_command(args: Option<Value>) -> Result<Value, String> {
-    // 解析参数并返回结果
-    Ok(serde_json::json!({"status": "ok"}))
+#[tauri::command]
+#[remote_command]
+fn echo_string(value: String) -> String {
+    value
+}
+
+#[tauri::command]
+#[remote_command]
+fn divide(a: i32, b: i32) -> Result<i32, String> {
+    if b == 0 { Err("Division by zero".into()) } else { Ok(a / b) }
 }
 
 tauri::Builder::default()
     .plugin(open_tauri_remote_webview::init())
+    .invoke_handler(tauri::generate_handler![echo_string, divide])
     .setup(|app| {
-        // 注册命令，实现无头 WS 访问
-        let registry = app.state::<CommandRegistry>();
-        registry.register("my_command", my_command);
-
-        let handle = app.handle().clone();
-        tauri::async_runtime::spawn(async move {
-            handle.start_remote_ui(RemoteUiConfig::default()).await.ok();
-        });
+        register_remote_commands!(app, [
+            echo_string,
+            divide,
+        ]);
+        // ... start_remote_ui 等
         Ok(())
     })
     .run(tauri::generate_context!())
     .expect("error running app");
 ```
 
-在 `CommandRegistry` 中注册的命令直接从 Rust 分发——无需 `window.eval()`，无需 WebView。未在注册表中找到的命令会回退到 WebView 路径，保持向后兼容。
+**原理：** `#[remote_command]` 为函数自动生成一个 `__orui_wrap__<fn_name>` 函数，它能从 `Option<serde_json::Value>` 反序列化参数、调用原函数、序列化返回值。`register_remote_commands!` 在 setup 中将所有这些 wrapper 注册到 `CommandRegistry`。
 
-> **注意：** 使用 `CommandRegistry` 时，你的命令函数接收原始的 `Option<Value>` 参数，需要手动解析。这是比 `#[tauri::command]` 更低层的 API，但独立于 Tauri 的 IPC 系统。
+**注意：** `#[remote_command]` 会自动跳过 `AppHandle`、`Window`、`State` 等 Tauri 注入参数，只处理用户数据参数。
+
+### 6. CommandRegistry — 底层 API（备选）
+
+如需手动控制，也可以直接使用 `CommandRegistry`：
+
+```rust
+use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
+use serde_json::Value;
+
+fn my_command(args: Option<Value>) -> Result<Value, String> {
+    Ok(serde_json::json!({"status": "ok"}))
+}
+
+tauri::Builder::default()
+    .plugin(open_tauri_remote_webview::init())
+    .setup(|app| {
+        let registry = app.state::<CommandRegistry>();
+        registry.register("my_command", my_command);
+        // ...
+    })
+    .run(tauri::generate_context!())
+    .expect("error running app");
+```
+
+> **注意：** 手动注册时命令函数接收原始的 `Option<Value>` 参数，需要自行解析。
 
 ### 6. 手动启停服务
 

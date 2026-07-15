@@ -28,6 +28,9 @@ permissions/schemas
 
 # Test project generated artifacts
 test/vue-app/src-tauri/gen/
+test-vue-app/
 test/data
+macros/tests/
+macros/target/
 .cargo_vcs_info.json
 Cargo.toml.orig

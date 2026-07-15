@@ -13,8 +13,6 @@ use tokio::sync::RwLock;
 #[cfg(feature = "ws")]
 use crate::WsPayload;
 #[cfg(feature = "ws")]
-use tokio::sync::Mutex;
-#[cfg(feature = "ws")]
 use futures::{stream::SplitSink, SinkExt};
 #[cfg(feature = "ws")]
 use hyper::upgrade::Upgraded;
@@ -22,6 +20,8 @@ use hyper::upgrade::Upgraded;
 use hyper_tungstenite::{tungstenite::Message, WebSocketStream};
 #[cfg(feature = "ws")]
 use hyper_util::rt::TokioIo;
+#[cfg(feature = "ws")]
+use tokio::sync::Mutex;
 
 pub fn init<R, C>(app: &AppHandle, _api: PluginApi<R, C>) -> crate::Result<Arc<RwLock<RemoteUi>>>
 where
@@ -58,7 +58,10 @@ impl RemoteUi {
         tauri::async_runtime::spawn(async move {
             let msg = serde_json::to_string(&response).unwrap();
             if let Err(e) = session.lock().await.send(Message::text(msg)).await {
-                log_error!("send_ws_response", format!("Failed to send WS response: {:?}", e));
+                log_error!(
+                    "send_ws_response",
+                    format!("Failed to send WS response: {:?}", e)
+                );
             }
         });
     }
@@ -70,13 +73,24 @@ impl RemoteUi {
         session: Arc<Mutex<SplitSink<WebSocketStream<TokioIo<Upgraded>>, Message>>>,
     ) -> Result<(), Error> {
         let ws_payload: WsPayload = serde_json::from_str(&payload)?;
-        log_info!("invoke_rpc", format!("Received RPC request: cmd={}, id={}, args={:?}",
-            ws_payload.cmd, ws_payload.id, ws_payload.args));
+        log_info!(
+            "invoke_rpc",
+            format!(
+                "Received RPC request: cmd={}, id={}, args={:?}",
+                ws_payload.cmd, ws_payload.id, ws_payload.args
+            )
+        );
 
         // Try command registry first — no WebView needed
         if let Some(registry) = self.app.try_state::<CommandRegistry>() {
             if let Some(result) = registry.dispatch(&ws_payload.cmd, ws_payload.args.clone()) {
-                log_info!("invoke_rpc", format!("Command dispatched via registry: cmd={}, id={}", ws_payload.cmd, ws_payload.id));
+                log_info!(
+                    "invoke_rpc",
+                    format!(
+                        "Command dispatched via registry: cmd={}, id={}",
+                        ws_payload.cmd, ws_payload.id
+                    )
+                );
                 let response = match result {
                     Ok(value) => {
                         let inner = json!({"status": "success", "payload": value});
@@ -96,7 +110,10 @@ impl RemoteUi {
         let window = match self.app.get_webview_window("main") {
             Some(w) => w,
             None => {
-                log_warn!("invoke_rpc", "No main webview window (headless mode), sending error response");
+                log_warn!(
+                    "invoke_rpc",
+                    "No main webview window (headless mode), sending error response"
+                );
                 let inner = json!({"error": "WebviewWindow Not Found (headless mode) and command not found in registry"});
                 let response = json!({"id": ws_payload.id, "payload": inner.to_string()});
                 Self::send_ws_response(&session, response);
@@ -105,7 +122,13 @@ impl RemoteUi {
         };
         let req_unique_id = format!("remote-ui::result::{}", &ws_payload.id);
         let timeout_id = ws_payload.id;
-        log_info!("invoke_rpc", format!("Registering one-shot event listener: event_id={}", req_unique_id));
+        log_info!(
+            "invoke_rpc",
+            format!(
+                "Registering one-shot event listener: event_id={}",
+                req_unique_id
+            )
+        );
 
         // Timeout safety net — prevents hanging if the eval'd JS never fires
         let timeout_session = session.clone();
@@ -122,12 +145,22 @@ impl RemoteUi {
             .once_any(&req_unique_id, move |handler| {
                 let payload = handler.payload().to_string();
                 let id = ws_payload.id;
-                log_info!("invoke_rpc::callback", format!("Tauri IPC returned, id={}, payload size={} bytes, starting WS send task", id, payload.len()));
+                log_info!(
+                    "invoke_rpc::callback",
+                    format!(
+                        "Tauri IPC returned, id={}, payload size={} bytes, starting WS send task",
+                        id,
+                        payload.len()
+                    )
+                );
                 let session = session.clone();
                 tauri::async_runtime::spawn(async move {
                     let json_msg = json!({"id":id,"payload":payload}).to_string();
                     if let Err(e) = session.lock().await.send(Message::text(json_msg)).await {
-                        log_error!("invoke_rpc::send_task", format!("WS send failed! id={}, error={:?}", id, e));
+                        log_error!(
+                            "invoke_rpc::send_task",
+                            format!("WS send failed! id={}, error={:?}", id, e)
+                        );
                     }
                 });
             });
@@ -168,10 +201,23 @@ impl RemoteUi {
     pub fn emit<P: Serialize + Clone>(&self, event: &str, payload: P) -> Result<(), Error> {
         let handles = self.rpc_server.get_all_ws_handles();
         if handles.is_empty() {
-            log_warn!("emit", format!("No WS clients connected, cannot send event: event={}", event));
+            log_warn!(
+                "emit",
+                format!(
+                    "No WS clients connected, cannot send event: event={}",
+                    event
+                )
+            );
             return Ok(());
         }
-        log_info!("emit", format!("Broadcasting event via WS to {} client(s): event={}", handles.len(), event));
+        log_info!(
+            "emit",
+            format!(
+                "Broadcasting event via WS to {} client(s): event={}",
+                handles.len(),
+                event
+            )
+        );
         let event_owned = event.to_owned();
         let json_str = serde_json::json!({"event": event_owned, "payload": payload}).to_string();
         for ws_handle in handles {
@@ -181,10 +227,19 @@ impl RemoteUi {
                 async move {
                     match ws_handle.lock().await.send(Message::text(json_str)).await {
                         Ok(_) => {
-                            log_info!("emit::send_task", format!("Event sent: event={}", event_owned));
+                            log_info!(
+                                "emit::send_task",
+                                format!("Event sent: event={}", event_owned)
+                            );
                         }
                         Err(err) => {
-                            log_error!("emit::send_task", format!("Event send failed: event={}, error={:?}", event_owned, err));
+                            log_error!(
+                                "emit::send_task",
+                                format!(
+                                    "Event send failed: event={}, error={:?}",
+                                    event_owned, err
+                                )
+                            );
                         }
                     }
                 }
@@ -210,7 +265,8 @@ mod tests {
 
     #[test]
     fn ws_payload_deserialize_with_option() {
-        let raw = r#"{"id":99,"cmd":"configure","args":{"theme":"dark"},"option":{"timeout":5000}}"#;
+        let raw =
+            r#"{"id":99,"cmd":"configure","args":{"theme":"dark"},"option":{"timeout":5000}}"#;
         let payload: crate::WsPayload = serde_json::from_str(raw).unwrap();
         assert_eq!(payload.id, 99);
         assert_eq!(payload.cmd, "configure");
@@ -234,7 +290,7 @@ mod tests {
         let payload: crate::WsPayload = serde_json::from_str(raw).unwrap();
         assert_eq!(payload.id, 3);
         assert_eq!(payload.cmd, "sum");
-        assert_eq!(payload.args, Some(json!([1,2,3,4,5])));
+        assert_eq!(payload.args, Some(json!([1, 2, 3, 4, 5])));
     }
 
     #[test]

@@ -63,12 +63,13 @@ mod tests {
     #[test]
     fn register_and_dispatch_with_args() {
         let registry = CommandRegistry::new();
-        registry.register("echo", |args| {
-            Ok(args.unwrap_or(Value::Null))
-        });
+        registry.register("echo", |args| Ok(args.unwrap_or(Value::Null)));
         let args = Some(serde_json::json!({"msg": "hello"}));
         let result = registry.dispatch("echo", args);
-        assert_eq!(result.unwrap().unwrap(), serde_json::json!({"msg": "hello"}));
+        assert_eq!(
+            result.unwrap().unwrap(),
+            serde_json::json!({"msg": "hello"})
+        );
     }
 
     #[test]

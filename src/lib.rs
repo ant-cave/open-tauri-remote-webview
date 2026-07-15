@@ -17,6 +17,9 @@ pub use command_registry::CommandRegistry;
 pub use error::{Error, Result};
 pub use remote_ui::*;
 
+// Re-export the proc macros
+pub use open_tauri_remote_webview_macros::{register_remote_commands, remote_command};
+
 /// Initializes the remote-ui Tauri plugin.
 pub fn init() -> TauriPlugin<Wry> {
     Builder::new("remote-ui")

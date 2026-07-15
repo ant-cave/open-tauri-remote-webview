@@ -33,10 +33,7 @@ use hyper_util::rt::TokioIo;
 #[cfg(feature = "ws")]
 use std::collections::HashMap;
 #[cfg(feature = "ws")]
-use tokio::{
-    net::TcpListener,
-    sync::Mutex,
-};
+use tokio::{net::TcpListener, sync::Mutex};
 
 #[cfg(test)]
 mod tests {
@@ -269,7 +266,10 @@ impl RpcServer {
     #[cfg(not(feature = "ws"))]
     pub(crate) fn spawn_http_server(&mut self) -> Result<(), Error> {
         self.is_active = true;
-        log_info!("spawn_http_server", "WS feature disabled, server not started (IPC-only mode)");
+        log_info!(
+            "spawn_http_server",
+            "WS feature disabled, server not started (IPC-only mode)"
+        );
         Ok(())
     }
 
@@ -297,21 +297,42 @@ async fn create_hyper_server(
     port: u16,
     app_handle: Arc<AppHandle>,
 ) -> Result<(), Error> {
-    log_info!("create_hyper_server", format!("Binding TCP listener to {}:{}", origin, port));
+    log_info!(
+        "create_hyper_server",
+        format!("Binding TCP listener to {}:{}", origin, port)
+    );
     let listener = TcpListener::bind((origin, port)).await?;
     if let Ok(local_addr) = listener.local_addr() {
-        log_info!("create_hyper_server", format!("Remote UI available at http://localhost:{}", local_addr.port()));
+        log_info!(
+            "create_hyper_server",
+            format!(
+                "Remote UI available at http://localhost:{}",
+                local_addr.port()
+            )
+        );
     }
-    log_info!("create_hyper_server", format!("Listening on {}:{}, waiting for connections...", origin, port));
+    log_info!(
+        "create_hyper_server",
+        format!(
+            "Listening on {}:{}, waiting for connections...",
+            origin, port
+        )
+    );
     loop {
         let remote_ui = app_handle.state::<Arc<RwLock<RemoteUi>>>();
         if !remote_ui.read().await.rpc_server.get_is_active() {
-            log_info!("create_hyper_server", "Server marked inactive, exiting HTTP loop");
+            log_info!(
+                "create_hyper_server",
+                "Server marked inactive, exiting HTTP loop"
+            );
             break;
         }
         match listener.accept().await {
             Ok((stream, addr)) => {
-                log_info!("create_hyper_server", format!("Accepted new TCP connection: {}", addr));
+                log_info!(
+                    "create_hyper_server",
+                    format!("Accepted new TCP connection: {}", addr)
+                );
                 let io = TokioIo::new(stream);
                 let req_app_handle = app_handle.clone();
 
@@ -324,7 +345,10 @@ async fn create_hyper_server(
                         .with_upgrades()
                         .await
                     {
-                        log_error!("create_hyper_server", format!("HTTP connection error: {:?}", err));
+                        log_error!(
+                            "create_hyper_server",
+                            format!("HTTP connection error: {:?}", err)
+                        );
                     }
                 });
             }
@@ -346,13 +370,19 @@ async fn handle_request(
         ("GET", "/remote_ui_ws") => {
             log_info!("handle_request", "Received WebSocket upgrade request");
             if hyper_tungstenite::is_upgrade_request(&request) {
-                log_info!("handle_request", "Request is valid WebSocket upgrade, proceeding...");
+                log_info!(
+                    "handle_request",
+                    "Request is valid WebSocket upgrade, proceeding..."
+                );
                 match hyper_tungstenite::upgrade(request, None) {
                     Ok((response, websocket)) => {
                         log_info!("handle_request", "WebSocket upgrade successful");
                         tauri::async_runtime::spawn(async move {
                             if let Err(e) = ws_handle(websocket, Arc::clone(&app_handle)).await {
-                                log_error!("handle_request", format!("WebSocket handler error: {:?}", e));
+                                log_error!(
+                                    "handle_request",
+                                    format!("WebSocket handler error: {:?}", e)
+                                );
                             }
                         });
                         Ok(response.map(|_| Full::new(Bytes::new())))
@@ -366,7 +396,10 @@ async fn handle_request(
                     }
                 }
             } else {
-                log_warn!("handle_request", "Request is not a valid WebSocket upgrade request");
+                log_warn!(
+                    "handle_request",
+                    "Request is not a valid WebSocket upgrade request"
+                );
                 Err(Error::FailedToReceiveMessage)
             }
         }
@@ -383,7 +416,10 @@ async fn ws_handle(websocket: HyperWebsocket, app_handle: Arc<AppHandle>) -> Res
     log_info!("ws_handle", "Waiting for WebSocket connection upgrade...");
     match websocket.await {
         Ok(ws_stream) => {
-            log_info!("ws_handle", "WebSocket connection upgraded, new connection established");
+            log_info!(
+                "ws_handle",
+                "WebSocket connection upgraded, new connection established"
+            );
             let (tx, mut rx) = ws_stream.split();
             let ws_sender = Arc::new(Mutex::new(tx));
             // Replace existing handle without closing — let the old one die naturally
@@ -393,7 +429,10 @@ async fn ws_handle(websocket: HyperWebsocket, app_handle: Arc<AppHandle>) -> Res
                 remote_ui_mut
                     .rpc_server
                     .set_ws_handle("main", ws_sender.clone());
-                log_info!("ws_handle", "New WebSocket handle registered for window label: main");
+                log_info!(
+                    "ws_handle",
+                    "New WebSocket handle registered for window label: main"
+                );
             }
             while let Some(message_stream) = rx.next().await {
                 match message_stream {
@@ -411,7 +450,8 @@ async fn ws_handle(websocket: HyperWebsocket, app_handle: Arc<AppHandle>) -> Res
                             }
                             log_info!(
                                 "ws_handle",
-                                format!("Received text message ({} bytes): {}",
+                                format!(
+                                    "Received text message ({} bytes): {}",
                                     msg_str.len(),
                                     if msg_str.len() > 200 {
                                         format!("{}...", &msg_str[..200])
@@ -422,12 +462,20 @@ async fn ws_handle(websocket: HyperWebsocket, app_handle: Arc<AppHandle>) -> Res
                             );
                             let remote_ui = app_handle.state::<Arc<RwLock<RemoteUi>>>();
                             let remote_ui_mut = remote_ui.read().await;
-                            if let Err(e) = remote_ui_mut.invoke_rpc(msg.to_string(), ws_sender.clone()) {
-                                log_error!("ws_handle", format!("invoke_rpc failed, connection kept alive: {:?}", e));
+                            if let Err(e) =
+                                remote_ui_mut.invoke_rpc(msg.to_string(), ws_sender.clone())
+                            {
+                                log_error!(
+                                    "ws_handle",
+                                    format!("invoke_rpc failed, connection kept alive: {:?}", e)
+                                );
                             }
                         }
                         Message::Close(frame) => {
-                            log_info!("ws_handle", format!("Received WebSocket close frame: {:?}", frame));
+                            log_info!(
+                                "ws_handle",
+                                format!("Received WebSocket close frame: {:?}", frame)
+                            );
                             log_info!("ws_handle", "Close frame received, exiting message loop");
                             break;
                         }
@@ -446,10 +494,11 @@ async fn ws_handle(websocket: HyperWebsocket, app_handle: Arc<AppHandle>) -> Res
             Ok(())
         }
         Err(err) => {
-            log_error!("ws_handle", format!("WebSocket stream upgrade failed: {:?}", err));
+            log_error!(
+                "ws_handle",
+                format!("WebSocket stream upgrade failed: {:?}", err)
+            );
             Err(Error::FailedToReceiveMessage)
         }
     }
 }
-
-

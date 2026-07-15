@@ -23,7 +23,7 @@ Use it for:
 ## What this is NOT
 
 - **Not a remote WebView renderer** — the browser doesn't see the Tauri WebView's rendered output. It loads its own copy of the frontend and communicates via WebSocket.
-- **Not truly headless** — commands invoked via WS are currently dispatched through the native WebView. A real `WebviewWindow("main")` must exist. The `CommandRegistry` API (see below) removes this requirement for registered commands.
+- **Not truly headless** — commands invoked via WS are dispatched through the native WebView by default. With `#[remote_command]` (see below), registered commands dispatch directly from Rust — no WebView needed.
 - **Not a complete `@tauri-apps/api` replacement** — only `invoke`, `listen`, and `once` are currently bridged. Modules like `dialog`, `fs`, `shell` require custom commands.
 
 This project is based on [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0)
@@ -82,7 +82,7 @@ Zero migration cost. All exported APIs have identical signatures to native Tauri
 | **Single-window mode** | `getCurrentWindow()` always returns `label: "main"` | Use explicit window labels in commands |
 | **No asset protocol** | `convertFileSrc()` returns path as-is | Use raw URLs for assets |
 | **No `__TAURI__` env** | Bridge sets `__TAURI_REMOTE_UI_SHIM__` instead | Check for either flag |
-| **`invoke` requires WebView** | Unregistered commands need a real `WebviewWindow("main")` to dispatch through | Register commands in `CommandRegistry` (see below) |
+| **`invoke` requires WebView** | Unregistered commands need a real `WebviewWindow("main")` to dispatch through | Use `register_remote_commands!` (see below) |
 | **Unauthenticated WS** | No auth on the WebSocket endpoint | Use firewall/network isolation |
 | **`@tauri-apps/api/dialog`** | Not bridged | Expose as custom Tauri commands |
 | **`@tauri-apps/api/fs`** | Not bridged | Expose as custom Tauri commands |
@@ -113,6 +113,7 @@ Migrating an existing Tauri app requires only a few changes. Most of your fronte
 3. **Vite:** Add the `/remote_ui_ws` proxy (see [Usage > Vite dev proxy](#4-vite-dev-proxy)).
 4. **Clean up:** Delete all `isTauri()` / `isRunningInTauri()` branches — the bridge handles environment detection automatically.
 5. **Recommended:** Replace `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` so backend events also reach browser clients.
+6. **Recommended (headless):** Add `#[remote_command]` to your commands and call `register_remote_commands!` in `setup()` so they work without a WebView (see [Usage > remote_command](#5-remote_command--one-attribute-headless-websocket-support-recommended)).
 
 ### What stays the same
 
@@ -234,41 +235,72 @@ server: {
 },
 ```
 
-### 5. CommandRegistry — invoke without a WebView (optional)
+### 5. `#[remote_command]` — one-attribute headless WebSocket support (recommended)
 
-By default, commands invoked over WS are dispatched through a real `WebviewWindow("main")` via `window.eval()`. To remove this dependency and make commands work **without any WebView**, register them in the `CommandRegistry`:
+Add `#[remote_command]` on top of existing `#[tauri::command]` functions, then call `register_remote_commands!` in `setup()`:
 
 ```rust
-use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
-use serde_json::Value;
+use open_tauri_remote_webview::{remote_command, register_remote_commands};
 
-fn my_command(args: Option<Value>) -> Result<Value, String> {
-    // Parse args and return result
-    Ok(serde_json::json!({"status": "ok"}))
+#[tauri::command]
+#[remote_command]
+fn echo_string(value: String) -> String {
+    value
+}
+
+#[tauri::command]
+#[remote_command]
+fn divide(a: i32, b: i32) -> Result<i32, String> {
+    if b == 0 { Err("Division by zero".into()) } else { Ok(a / b) }
 }
 
 tauri::Builder::default()
     .plugin(open_tauri_remote_webview::init())
+    .invoke_handler(tauri::generate_handler![echo_string, divide])
     .setup(|app| {
-        // Register commands for headless WS access
-        let registry = app.state::<CommandRegistry>();
-        registry.register("my_command", my_command);
-
-        let handle = app.handle().clone();
-        tauri::async_runtime::spawn(async move {
-            handle.start_remote_ui(RemoteUiConfig::default()).await.ok();
-        });
+        register_remote_commands!(app, [
+            echo_string,
+            divide,
+        ]);
+        // ... start_remote_ui, etc.
         Ok(())
     })
     .run(tauri::generate_context!())
     .expect("error running app");
 ```
 
-Commands registered in the `CommandRegistry` are dispatched directly from Rust — no `window.eval()`, no WebView required. Commands not found in the registry fall back to the WebView path for backwards compatibility.
+**How it works:** `#[remote_command]` generates a `__orui_wrap__<fn_name>` function that deserializes args from `Option<serde_json::Value>`, calls the original function, and serializes the return value. `register_remote_commands!` registers all these wrappers in the `CommandRegistry`.
 
-> **Note:** When using `CommandRegistry`, your command function receives raw `Option<Value>` arguments and must parse them manually. This is a lower-level API than `#[tauri::command]` but independent of Tauri's IPC system.
+**Note:** `#[remote_command]` automatically skips Tauri-injected parameters (`AppHandle`, `Window`, `State`, etc.) — only user data parameters are included.
+- The macro generates a `__orui_wrap__<fn_name>` wrapper and registers it automatically
+- Registered commands dispatch directly from Rust — no `eval()`, no WebView.
 
-### 6. Start / Stop server manually
+### 6. CommandRegistry — low-level API (alternative)
+
+For manual control, use `CommandRegistry` directly:
+
+```rust
+use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
+use serde_json::Value;
+
+fn my_command(args: Option<Value>) -> Result<Value, String> {
+    Ok(serde_json::json!({"status": "ok"}))
+}
+
+tauri::Builder::default()
+    .plugin(open_tauri_remote_webview::init())
+    .setup(|app| {
+        let registry = app.state::<CommandRegistry>();
+        registry.register("my_command", my_command);
+        // ...
+    })
+    .run(tauri::generate_context!())
+    .expect("error running app");
+```
+
+> **Note:** When using `CommandRegistry` directly, your command function receives raw `Option<Value>` arguments and must parse them manually.
+
+### 7. Start / Stop server manually
 
 ```rust
 async fn enable_server(app: AppHandle, port: u16) -> Result<String, String> {

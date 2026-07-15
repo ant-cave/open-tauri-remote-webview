@@ -199,7 +199,9 @@ mod tests {
 
     #[test]
     fn config_set_port_none() {
-        let cfg = RemoteUiConfig::default().set_port(Some(8080)).set_port(None);
+        let cfg = RemoteUiConfig::default()
+            .set_port(Some(8080))
+            .set_port(None);
         assert!(cfg.port.is_none());
     }
 
@@ -264,9 +266,17 @@ mod tests {
     #[test]
     fn rpc_status_roundtrip() {
         for (input, expected_str, expected_variant) in [
-            (RpcResponseStatus::Success, "success", RpcResponseStatus::Success),
+            (
+                RpcResponseStatus::Success,
+                "success",
+                RpcResponseStatus::Success,
+            ),
             (RpcResponseStatus::Error, "error", RpcResponseStatus::Error),
-            (RpcResponseStatus::Invalid, "invalid", RpcResponseStatus::Invalid),
+            (
+                RpcResponseStatus::Invalid,
+                "invalid",
+                RpcResponseStatus::Invalid,
+            ),
         ] {
             let s: &str = input.into();
             assert_eq!(s, expected_str);
@@ -279,7 +289,8 @@ mod tests {
 
     #[test]
     fn ws_payload_deserialize_full() {
-        let json = r#"{"id": 42, "cmd": "my_command", "args": {"key": "value"}, "option": {"opt": true}}"#;
+        let json =
+            r#"{"id": 42, "cmd": "my_command", "args": {"key": "value"}, "option": {"opt": true}}"#;
         let payload: WsPayload = serde_json::from_str(json).unwrap();
         assert_eq!(payload.id, 42);
         assert_eq!(payload.cmd, "my_command");
@@ -358,7 +369,9 @@ mod tests {
 
     #[test]
     fn emit_response_roundtrip() {
-        let resp = EmitResponse { value: Some("ok".into()) };
+        let resp = EmitResponse {
+            value: Some("ok".into()),
+        };
         let json = serde_json::to_string(&resp).unwrap();
         let back: EmitResponse = serde_json::from_str(&json).unwrap();
         assert_eq!(back.value, Some("ok".into()));

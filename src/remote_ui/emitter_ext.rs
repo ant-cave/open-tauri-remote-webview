@@ -5,8 +5,8 @@
 use crate::RemoteUi;
 use serde::Serialize;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Error, EventTarget, Manager, Runtime, WebviewWindow};
 use tauri::window::Window;
+use tauri::{AppHandle, Emitter, Error, EventTarget, Manager, Runtime, WebviewWindow};
 use tokio::sync::RwLock;
 
 /// Extension trait that mirrors [`tauri::Emitter`] with the same **synchronous**
@@ -179,12 +179,14 @@ mod tests {
         fn _assert_emit_str_to<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
         fn _assert_emit_filter<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
         fn _assert_emit_str_filter<R: Runtime, T: EmitterExt<R> + Emitter<R>>() {}
-        let _ = (_assert_emit::<tauri::Wry, AppHandle<tauri::Wry>>,
-                  _assert_emit_to::<tauri::Wry, AppHandle<tauri::Wry>>,
-                  _assert_emit_str::<tauri::Wry, AppHandle<tauri::Wry>>,
-                  _assert_emit_str_to::<tauri::Wry, AppHandle<tauri::Wry>>,
-                  _assert_emit_filter::<tauri::Wry, AppHandle<tauri::Wry>>,
-                  _assert_emit_str_filter::<tauri::Wry, AppHandle<tauri::Wry>>);
+        let _ = (
+            _assert_emit::<tauri::Wry, AppHandle<tauri::Wry>>,
+            _assert_emit_to::<tauri::Wry, AppHandle<tauri::Wry>>,
+            _assert_emit_str::<tauri::Wry, AppHandle<tauri::Wry>>,
+            _assert_emit_str_to::<tauri::Wry, AppHandle<tauri::Wry>>,
+            _assert_emit_filter::<tauri::Wry, AppHandle<tauri::Wry>>,
+            _assert_emit_str_filter::<tauri::Wry, AppHandle<tauri::Wry>>,
+        );
     }
 
     #[cfg(not(feature = "ws"))]

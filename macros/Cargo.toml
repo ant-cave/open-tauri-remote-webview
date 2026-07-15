@@ -1,0 +1,14 @@
+[package]
+edition = "2021"
+name = "open-tauri-remote-webview-macros"
+version = "0.0.6-alpha.4"
+description = "Proc macros for open-tauri-remote-webview"
+license = "MIT"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "2", features = ["full", "extra-traits", "parsing"] }
+quote = "1"
+proc-macro2 = "1"

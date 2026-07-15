@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::fs;
 
 use open_tauri_remote_webview::{
-    EmitterExt, RemoteUiConfig, RemoteUiExt,
+    EmitterExt, RemoteUiConfig, RemoteUiExt, remote_command, register_remote_commands,
 };
 
 static COUNTER: AtomicI32 = AtomicI32::new(0);
@@ -11,21 +11,25 @@ static COUNTER: AtomicI32 = AtomicI32::new(0);
 // ── Basic Types ──────────────────────────────────────────
 
 #[tauri::command]
+#[remote_command]
 fn echo_string(value: String) -> String {
     value
 }
 
 #[tauri::command]
+#[remote_command]
 fn add_numbers(a: i32, b: i32) -> i32 {
     a + b
 }
 
 #[tauri::command]
+#[remote_command]
 fn to_bool(value: bool) -> String {
     format!("bool is: {}", value)
 }
 
 #[tauri::command]
+#[remote_command]
 fn echo_json(value: serde_json::Value) -> serde_json::Value {
     value
 }
@@ -41,6 +45,7 @@ struct User {
 }
 
 #[tauri::command]
+#[remote_command]
 fn get_user(id: u32) -> User {
     User {
         id,
@@ -58,6 +63,7 @@ struct Page<T: Serialize> {
 }
 
 #[tauri::command]
+#[remote_command]
 fn get_paginated() -> Page<String> {
     Page {
         items: vec!["item1".into(), "item2".into(), "item3".into()],
@@ -69,11 +75,13 @@ fn get_paginated() -> Page<String> {
 // ── Error Handling ───────────────────────────────────────
 
 #[tauri::command]
+#[remote_command]
 fn always_fails() -> Result<String, String> {
     Err("This command intentionally fails".into())
 }
 
 #[tauri::command]
+#[remote_command]
 fn divide(a: i32, b: i32) -> Result<i32, String> {
     if b == 0 {
         Err("Division by zero".into())
@@ -301,15 +309,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(open_tauri_remote_webview::init())
         .invoke_handler(tauri::generate_handler![
-            // Basic types
+            // All #[remote_command] functions are also Tauri commands
             echo_string,
             add_numbers,
             to_bool,
             echo_json,
-            // Complex types
             get_user,
             get_paginated,
-            // Error handling
             always_fails,
             divide,
             // Events
@@ -356,6 +362,16 @@ pub fn run() {
                 .build()?;
                 let _ = window.open_devtools();
             }
+            register_remote_commands!(app, [
+                echo_string,
+                add_numbers,
+                to_bool,
+                echo_json,
+                get_user,
+                get_paginated,
+                always_fails,
+                divide,
+            ]);
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 match app_handle.start_remote_ui(
