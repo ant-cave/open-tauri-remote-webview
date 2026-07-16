@@ -72,6 +72,12 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let wrapper = if has_result {
         // Function returns Result<T, E>
+        let args_expr = if user_args.is_empty() {
+            quote! { args.unwrap_or(::serde_json::json!({})) }
+        } else {
+            quote! { args.unwrap_or(::serde_json::Value::Null) }
+        };
+
         if is_async {
             quote! {
                 #[doc(hidden)]
@@ -79,7 +85,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
-                        args.unwrap_or(::serde_json::Value::Null)
+                        #args_expr
                     ).map_err(|e| format!("failed to deserialize args for '{}': {}", #fn_name_str, e))?;
                     let __val = ::tauri::async_runtime::block_on(async { #call.await })
                         .map_err(|e| e.to_string())?;
@@ -93,7 +99,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
-                        args.unwrap_or(::serde_json::Value::Null)
+                        #args_expr
                     ).map_err(|e| format!("failed to deserialize args for '{}': {}", #fn_name_str, e))?;
                     let __val = #call.map_err(|e| e.to_string())?;
                     Ok(::serde_json::to_value(__val).unwrap_or(::serde_json::Value::Null))
@@ -102,6 +108,12 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     } else {
         // Function returns plain T
+        let args_expr = if user_args.is_empty() {
+            quote! { args.unwrap_or(::serde_json::json!({})) }
+        } else {
+            quote! { args.unwrap_or(::serde_json::Value::Null) }
+        };
+
         if is_async {
             quote! {
                 #[doc(hidden)]
@@ -109,7 +121,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
-                        args.unwrap_or(::serde_json::Value::Null)
+                        #args_expr
                     ).map_err(|e| format!("failed to deserialize args for '{}': {}", #fn_name_str, e))?;
                     let __val = { ::tauri::async_runtime::block_on(async { #call.await }); };
                     Ok(::serde_json::to_value(__val).unwrap_or(::serde_json::Value::Null))
@@ -122,7 +134,7 @@ pub fn remote_command(_attr: TokenStream, item: TokenStream) -> TokenStream {
                     #[derive(::serde::Deserialize)]
                     struct __OruiArgs { #( #arg_names: #arg_types, )* }
                     let args_typed: __OruiArgs = ::serde_json::from_value(
-                        args.unwrap_or(::serde_json::Value::Null)
+                        #args_expr
                     ).map_err(|e| format!("failed to deserialize args for '{}': {}", #fn_name_str, e))?;
                     let __val = #call;
                     Ok(::serde_json::to_value(__val).unwrap_or(::serde_json::Value::Null))
@@ -210,7 +222,8 @@ pub fn register_remote_commands(input: TokenStream) -> TokenStream {
             let mod_ts: proc_macro2::TokenStream = mod_path.parse().unwrap();
             uses.push(quote! { use #mod_ts::#w; });
         }
-        regs.push(quote! { registry.register(#path_ts, |args| { #w(args) }); });
+        let fn_name_str = fn_name.to_string();
+        regs.push(quote! { registry.register(#fn_name_str, |args| { #w(args) }); });
     }
 
     quote! { { use tauri::Manager; let registry = app.state::<open_tauri_remote_webview::CommandRegistry>(); #(#uses)* #(#regs)* } }.into()
