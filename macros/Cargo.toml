@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "open-tauri-remote-webview-macros"
-version = "0.0.7-alpha.0"
+version = "0.0.7-alpha.1"
 description = "Proc macros for open-tauri-remote-webview"
 license = "MIT"
 
