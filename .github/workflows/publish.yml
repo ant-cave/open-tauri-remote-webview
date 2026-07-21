@@ -74,7 +74,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   create-release:
-    needs: validate
+    needs: [validate, publish-crate]
     runs-on: ubuntu-latest
     permissions:
       contents: write
