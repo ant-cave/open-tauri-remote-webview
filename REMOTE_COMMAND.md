@@ -123,14 +123,28 @@ register_remote_commands!(app, [
 
 ## 如果不想用 `#[remote_command]`
 
-可以手动写 wrapper 并用原始 `register_remote_commands!` + 参数类型语法（不推荐）：
+可以手动使用 `CommandRegistry` 直接注册：
 
-```ignore
-register_remote_commands!(app, [
-    my_cmd, [name: String],
-    my_result_cmd, [a: i32] result,
-]);
+```rust
+use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
+use serde_json::Value;
+
+fn my_command(args: Option<Value>) -> Result<Value, String> {
+    let name: String = serde_json::from_value(
+        args.unwrap_or(serde_json::json!({}))
+            .get("name")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null)
+    ).map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({ "greeting": format!("Hello {name}") }))
+}
+
+// 在 setup() 中
+let registry = app.state::<CommandRegistry>();
+registry.register("my_command", my_command);
 ```
+
+> **注意：** 手动注册时命令函数接收原始的 `Option<Value>` 参数，需要自行解析。
 
 ## 已知限制
 

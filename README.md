@@ -1,227 +1,79 @@
-# Open Tauri Remote WebView — IPC WebSocket Bridge for Tauri v2
+# Open Tauri Remote WebView
 
 [![crates.io](https://img.shields.io/crates/v/open-tauri-remote-webview)](https://crates.io/crates/open-tauri-remote-webview)
 [![npm](https://img.shields.io/npm/v/open-tauri-remote-webview)](https://www.npmjs.com/package/open-tauri-remote-webview)
 
-**Backend (Rust library):** `cargo add open-tauri-remote-webview` **（run in `src-tauri/`）**
+Tauri v2 插件，通过 WebSocket 桥接 Tauri 的 IPC 层（commands + events），让浏览器可以像 WebView 一样调用 Tauri 后端。
 
-**Frontend (JS):** `npm install open-tauri-remote-webview` **（run in project root）**
+> **中文文档请看 [README.zh.md](README.zh.md)**
 
-> **中文用户请查看 [中文文档](README.zh.md)** — 包含完整的使用指引。
+## 适用场景
 
----
+- **前端开发** — 在浏览器中用完整 DevTools 开发调试前端，不需要 Rust 工具链
+- **E2E 测试** — Playwright / Cypress 直接连 Tauri 后端
+- **CI/CD** — 无 xvfb 测试 IPC 层
 
-## What this is
+## 不适用场景
 
-This plugin exposes your Tauri app's IPC layer (commands + events) over WebSocket, allowing a browser to call Tauri commands and receive events as if it were running inside the native WebView.
-
-Use it for:
-- **Frontend development** — develop and debug your Tauri frontend in a browser with full DevTools, without needing the Rust/Tauri toolchain
-- **E2E testing** — connect Playwright or Cypress directly to your Tauri backend
-- **CI/CD testing** — test your app's IPC layer in CI without xvfb
-
-## What this is NOT
-
-- **Not a remote WebView renderer** — the browser doesn't see the Tauri WebView's rendered output. It loads its own copy of the frontend and communicates via WebSocket.
-- **Not truly headless** — commands invoked via WS are dispatched through the native WebView by default. With `#[remote_command]` (see below), registered commands dispatch directly from Rust — no WebView needed.
-- **Not a complete `@tauri-apps/api` replacement** — only `invoke`, `listen`, and `once` are currently bridged. Modules like `dialog`, `fs`, `shell` require custom commands.
-
-This project is based on [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0)
-by [DraviaVemal](https://github.com/DraviaVemal), modified under the MIT license.
-All modifications are Copyright (c) 2026 **ant-cave**.
+- **不是远程渲染器** — 浏览器加载自己的前端副本，通过 WS 通信，看不到 WebView 的渲染输出
+- **不是完整 API 替代** — 只桥接了 `invoke`、`listen`、`once`，`dialog`/`fs`/`shell` 等需要自定义命令
 
 ---
 
-## Features
+## 5 分钟快速上手
 
-| Capability | WebView (IPC) | Browser (WS) |
-|---|---|---|
-| `invoke` (any command) | ✅ | ✅ |
-| Event `listen` / `once` | ✅ | ✅ |
-| `@tauri-apps/api/app` (getName, getVersion, ...) | ✅ | ✅ via bridge |
-| `@tauri-apps/api/window` (title, size, ...) | ✅ | ✅ via bridge |
-| `@tauri-apps/api/event` (listen, emit) | ✅ | ✅ via bridge |
-| Rust `emit` / `emit_to` / `emit_str` / ... → browser | ✅ | ✅ via `EmitterExt` |
-| IP-based access control (Localhost / Direct / Any) | ✅ | ✅ |
-| WS connection status floating badge | — | ✅ auto-shown |
-
----
-
-## API Compatibility with Native Tauri
-
-Zero migration cost. All exported APIs have identical signatures to native Tauri:
-
-### Rust side
-
-| Native `tauri::Emitter` | This plugin `open_tauri_remote_webview::EmitterExt` | Difference |
-|---|---|---|
-| `fn emit(...)` **sync** | `fn emit(...)` **sync** ✅ | None |
-| `fn emit_to(...)` sync | `fn emit_to(...)` sync ✅ | None |
-| `fn emit_str(...)` sync | `fn emit_str(...)` sync ✅ | None |
-| `fn emit_str_to(...)` sync | `fn emit_str_to(...)` sync ✅ | None |
-| `fn emit_filter(...)` sync | `fn emit_filter(...)` sync ✅ | None |
-| `fn emit_str_filter(...)` sync | `fn emit_str_filter(...)` sync ✅ | None |
-
-**Implemented for:** `AppHandle<R>`, `WebviewWindow<R>`, **`Window<R>`** — all 6 emit methods work on all three types.
-
-**Usage:** Simply replace `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` — all calls continue to work unchanged.
-
-### JS side
-
-| Native `@tauri-apps/api` | Bridge mode | Explicit API | Difference |
-|---|---|---|---|
-| `invoke<T>(cmd, args): Promise<T>` | Transparent proxy ✅ | `invoke<T>(cmd, args)` ✅ | None |
-| `listen<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `listen<T>(event, handler)` ✅ | None |
-| `once<T>(event, handler): Promise<() => void>` | Transparent proxy ✅ | `once<T>(event, handler)` ✅ | None |
-| `emit(event, payload): Promise<void>` | Generic proxy ✅ | Not exported | Works via generic invoke path (WS→eval); no local optimization like `listen`/`once` |
-
-### Known limitations
-
-| Limitation | Explanation | Workaround |
-|---|---|---|
-| **Single-window mode** | `getCurrentWindow()` always returns `label: "main"` | Use explicit window labels in commands |
-| **No asset protocol** | `convertFileSrc()` returns path as-is | Use raw URLs for assets |
-| **No `__TAURI__` env** | Bridge sets `__TAURI_REMOTE_UI_SHIM__` instead | Check for either flag |
-| **`invoke` requires WebView** | Unregistered commands need a real `WebviewWindow("main")` to dispatch through | Use `register_remote_commands!` (see below) |
-| **Unauthenticated WS** | No auth on the WebSocket endpoint | Use firewall/network isolation |
-| **`@tauri-apps/api/dialog`** | Not bridged | Expose as custom Tauri commands |
-| **`@tauri-apps/api/fs`** | Not bridged | Expose as custom Tauri commands |
-| **`@tauri-apps/api/shell`** | Not bridged | Expose as custom Tauri commands |
-
----
-
-## Migration from Native Tauri
-
-Migrating an existing Tauri app requires only a few changes. Most of your frontend code stays **exactly the same**.
-
-### What changes
-
-| Area | Before (native Tauri) | After (remote) |
-|---|---|---|
-| Rust plugin | — | Add crate + `.plugin(open_tauri_remote_webview::init())` |
-| Rust `emit()` (AppHandle / WebviewWindow / Window) | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt` (same call, sync) |
-| Rust start WS server | — | Add `app.start_remote_ui(RemoteUiConfig::default())` in `setup` |
-| Frontend install | — | `npm install open-tauri-remote-webview` |
-| Frontend import | `import "..." from "@tauri-apps/api"` | **No change** — add `import "open-tauri-remote-webview/bridge-init"` at entry |
-| `vite.config.ts` | — | Add `/remote_ui_ws` proxy |
-| `if (isTauri())` guards | Common pattern | **Remove them** — bridge handles everything |
-
-### Step-by-step
-
-1. **Rust:** `cargo add open-tauri-remote-webview`, register the plugin and start the WS server in `setup` (see [Usage > Rust side](#1-rust-side)).
-2. **Frontend:** `npm install open-tauri-remote-webview`, add `import "open-tauri-remote-webview/bridge-init"` at the top of your entry file.
-3. **Vite:** Add the `/remote_ui_ws` proxy (see [Usage > Vite dev proxy](#4-vite-dev-proxy)).
-4. **Clean up:** Delete all `isTauri()` / `isRunningInTauri()` branches — the bridge handles environment detection automatically.
-5. **Recommended:** Replace `use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` so backend events also reach browser clients.
-6. **Recommended (headless):** Add `#[remote_command]` to your commands and call `register_remote_commands!` in `setup()` so they work without a WebView (see [Usage > remote_command](#5-remote_command--one-attribute-headless-websocket-support-recommended)).
-
-### What stays the same
-
-- All `@tauri-apps/api/*` imports and usage
-- All Tauri command definitions on the Rust side
-- All frontend build tooling (Vite, Webpack, etc.)
-- All event `listen`/`once`/`emit` patterns
-- All window and app API calls
-
----
-
-## Usage
-
-### 1. Rust side
+### 第 1 步：Rust 端（2 分钟）
 
 ```bash
+cd src-tauri
 cargo add open-tauri-remote-webview
 ```
 
-> **Optional**: The `ws` Cargo feature (enabled by default) controls WebSocket support.
-> Disable it with `--no-default-features` if you only need IPC in WebView and
-> want to drop the WebSocket dependencies.
+修改 `src-tauri/src/lib.rs`，只需加 3 处：
 
 ```rust
-use open_tauri_remote_webview::{RemoteUiConfig, RemoteUiExt};
+use open_tauri_remote_webview::{RemoteUiConfig, RemoteUiExt}; // ① 加 import
 
-tauri::Builder::default()
-    .plugin(open_tauri_remote_webview::init())
-    .setup(|app| {
-        // Auto-start WebSocket server on launch
-        let handle = app.handle().clone();
-        tauri::async_runtime::spawn(async move {
-            handle.start_remote_ui(
-                RemoteUiConfig::default()
-                    .set_port(Some(9090))
-                    .enable_log()    // Rust-side log output (default: on)
-                    // .disable_log() // ← suppress server logs
-            ).await.ok();
-        });
-        Ok(())
-    })
-    .invoke_handler(tauri::generate_handler![/* your commands */])
-    .run(tauri::generate_context!())
-    .expect("error running app");
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(open_tauri_remote_webview::init()) // ② 注册插件
+        .setup(|app| {
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                handle
+                    .start_remote_ui(
+                        RemoteUiConfig::default()
+                            .set_port(Some(9090))  // WS 端口
+                            .enable_log(),
+                    )
+                    .await
+                    .ok();
+            });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![/* 你的命令 */])
+        .run(tauri::generate_context!())
+        .expect("error running app");
+}
 ```
 
-If you use `emit()` / `emit_to()` / `emit_str()` / etc. in Rust, replace
-`use tauri::Emitter` with `use open_tauri_remote_webview::EmitterExt` so events
-also get forwarded to browser clients. `EmitterExt` is implemented for
-`AppHandle`, `WebviewWindow`, and `Window` with the same **synchronous** signatures as
-`tauri::Emitter` — it is a true drop-in replacement.
-
-### 2. Frontend — zero-effort (recommended)
+### 第 2 步：前端（1 分钟）
 
 ```bash
 npm install open-tauri-remote-webview
 ```
 
-In your app entry point (`main.ts` / `main.js`), add **one line** at the top:
+在入口文件（`main.ts` / `main.js`）**最顶部**加一行：
 
 ```javascript
-// Auto-inject __TAURI_INTERNALS__ WS proxy — @tauri-apps/api works everywhere
 import "open-tauri-remote-webview/bridge-init";
 
-// Keep using @tauri-apps/api as-is — no import changes needed
+// 下面继续正常用 @tauri-apps/api，不用改任何东西
 import { invoke } from "@tauri-apps/api/core";
-import { getName } from "@tauri-apps/api/app";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 ```
 
-That's it. All `@tauri-apps/api` calls automatically go through IPC in
-WebView and WebSocket in the browser — no `if (isTauri())` branches needed.
-
-`bridge-init` also auto-shows a **WS connection status floating badge** (draggable,
-click to expand debug panel). To suppress it:
-
-```javascript
-// Method 1 — set flag before import (globally disable)
-window.__ORUI_DISABLE_BADGE__ = true;
-import "open-tauri-remote-webview/bridge-init";
-
-// Method 2 — call at runtime (toggle off)
-import { disableFloatingBadge } from "open-tauri-remote-webview/api/core";
-disableFloatingBadge();
-```
-
-By default the WS client auto-detects the server URL from `window.location`.
-Override it with a global before import:
-
-```javascript
-// Option A — full URL override
-window.__ORUI_WS_URL__ = "ws://192.168.1.100:9090/remote_ui_ws";
-
-// Option B — port override (uses current hostname + custom port)
-window.__ORUI_WS_PORT__ = 9090;
-
-import "open-tauri-remote-webview/bridge-init";
-```
-
-### 3. Frontend — explicit API (alternative)
-
-```javascript
-import { invoke, setBaseUrl } from "open-tauri-remote-webview/api/core";
-import { listen, once } from "open-tauri-remote-webview/api/event";
-```
-
-### 4. Vite dev proxy
+### 第 3 步：Vite 代理（1 分钟）
 
 ```javascript
 // vite.config.ts
@@ -235,15 +87,19 @@ server: {
 },
 ```
 
-### 5. `#[remote_command]` — one-attribute headless WebSocket support (recommended)
+完成。启动 `vite dev` 后在浏览器访问即可，所有 `@tauri-apps/api` 调用自动走 WebSocket。
 
-Add `#[remote_command]` on top of existing `#[tauri::command]` functions, then call `register_remote_commands!` in `setup()`:
+---
+
+## 推荐：无头模式（`#[remote_command]`）
+
+默认情况下，通过 WS 调用的命令仍需 WebView 分发。加上 `#[remote_command]` 后可以直接在 Rust 端分发，无需 WebView：
 
 ```rust
 use open_tauri_remote_webview::{remote_command, register_remote_commands};
 
 #[tauri::command]
-#[remote_command]
+#[remote_command]  // 加这一行
 fn echo_string(value: String) -> String {
     value
 }
@@ -251,62 +107,54 @@ fn echo_string(value: String) -> String {
 #[tauri::command]
 #[remote_command]
 fn divide(a: i32, b: i32) -> Result<i32, String> {
-    if b == 0 { Err("Division by zero".into()) } else { Ok(a / b) }
+    if b == 0 {
+        Err("Division by zero".into())
+    } else {
+        Ok(a / b)
+    }
 }
-
-tauri::Builder::default()
-    .plugin(open_tauri_remote_webview::init())
-    .invoke_handler(tauri::generate_handler![echo_string, divide])
-    .setup(|app| {
-        register_remote_commands!(app, [
-            echo_string,
-            divide,
-        ]);
-        // ... start_remote_ui, etc.
-        Ok(())
-    })
-    .run(tauri::generate_context!())
-    .expect("error running app");
 ```
 
-**How it works:** `#[remote_command]` generates a `__orui_wrap__<fn_name>` function that deserializes args from `Option<serde_json::Value>`, calls the original function, and serializes the return value. `register_remote_commands!` registers all these wrappers in the `CommandRegistry`.
-
-**Note:** `#[remote_command]` automatically skips Tauri-injected parameters (`AppHandle`, `Window`, `State`, etc.) — only user data parameters are included.
-- The macro generates a `__orui_wrap__<fn_name>` wrapper and registers it automatically
-- Registered commands dispatch directly from Rust — no `eval()`, no WebView.
-
-### 6. CommandRegistry — low-level API (alternative)
-
-For manual control, use `CommandRegistry` directly:
+然后在 `setup()` 中注册：
 
 ```rust
-use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
-use serde_json::Value;
-
-fn my_command(args: Option<Value>) -> Result<Value, String> {
-    Ok(serde_json::json!({"status": "ok"}))
-}
-
-tauri::Builder::default()
-    .plugin(open_tauri_remote_webview::init())
-    .setup(|app| {
-        let registry = app.state::<CommandRegistry>();
-        registry.register("my_command", my_command);
-        // ...
-    })
-    .run(tauri::generate_context!())
-    .expect("error running app");
+.setup(|app| {
+    register_remote_commands!(app, [
+        echo_string,
+        divide,
+    ]);
+    // ...
+    Ok(())
+})
 ```
 
-> **Note:** When using `CommandRegistry` directly, your command function receives raw `Option<Value>` arguments and must parse them manually.
+原理：`#[remote_command]` 自动生成 `__orui_wrap__<fn_name>` wrapper 函数，`register_remote_commands!` 将它们注册到 `CommandRegistry`。详见 [REMOTE_COMMAND.md](REMOTE_COMMAND.md)。
 
-### 7. Start / Stop server manually
+---
+
+## Rust 端完整用法
+
+### EmitterExt — 替换 tauri::Emitter
+
+如果在 Rust 中用 `emit()` / `emit_to()` 等，只需把 import 换一行，事件会自动转发到浏览器客户端：
+
+```rust
+// 之前
+use tauri::Emitter;
+
+// 之后
+use open_tauri_remote_webview::EmitterExt;
+```
+
+签名完全一致，支持 `AppHandle`、`WebviewWindow`、`Window` 三种类型，全部 6 个 emit 方法均为同步。
+
+### 手动启停服务
 
 ```rust
 async fn enable_server(app: AppHandle, port: u16) -> Result<String, String> {
-    app.start_remote_ui(
-        RemoteUiConfig::default().set_port(Some(port))
-    ).await.map_err(|e| e.to_string())?;
+    app.start_remote_ui(RemoteUiConfig::default().set_port(Some(port)))
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(format!("Server started on {}", port))
 }
 
@@ -316,126 +164,159 @@ async fn disable_server(app: AppHandle) -> Result<String, String> {
 }
 ```
 
----
+### CommandRegistry — 底层 API
 
-## How the bridge works
+如需手动注册命令（不用宏）：
 
-### Environment detection
+```rust
+use open_tauri_remote_webview::{CommandRegistry, RemoteUiConfig, RemoteUiExt};
+use serde_json::Value;
 
-`bridge-init` detects the runtime environment immediately (no polling):
+fn my_command(args: Option<Value>) -> Result<Value, String> {
+    Ok(serde_json::json!({"status": "ok"}))
+}
 
-1. **`__ORUI_WS_URL__` or `__ORUI_WS_PORT__` set** → browser mode (user explicitly wants WS)
-2. **`__TAURI_INTERNALS__` present** (and not the shim) → native Tauri mode
-3. **Otherwise** → browser mode (WS bridge)
-
-```
-module load
-  ↓
-check globals
-  ├── __ORUI_WS_URL__/__ORUI_WS_PORT__ set  →  install WS bridge shim
-  ├── __TAURI_INTERNALS__ found (native)     →  skip bridge, use real IPC
-  └── otherwise                              →  install WS bridge shim
+// 在 setup() 中
+let registry = app.state::<CommandRegistry>();
+registry.register("my_command", my_command);
 ```
 
-No polling, no User-Agent sniffing, no 3-second delay.
+### Cargo features
 
-### WS proxy shim
-
-The `__TAURI_INTERNALS__` proxy shim (`installTauriBridge`) is injected when
-your app runs in a browser. It mimics the real Tauri runtime:
-
-```
-Browser (@tauri-apps/api/*)
-  ↓
-window.__TAURI_INTERNALS__.invoke(cmd, args)
-  ├── "plugin:event|listen"  ──→  local WS event system (no round-trip)
-  ├── "plugin:event|unlisten" ──→  remove local listener
-  └── everything else         ──→  WS → Rust → WebView IPC → response
-```
-
-- `transformCallback` / `runCallback` — managed locally in `ShimCallbackManager`
-- `metadata` — hardcoded to `{ label: "main" }` (single-window mode)
-- `convertFileSrc` — returns path as-is (browser has no asset protocol)
-- `plugins.path` — inferred from `navigator.platform`
-- `__TAURI_REMOTE_UI_SHIM__` flag — lets apps distinguish shim from real Tauri
-
-### Frontend structured logging
-
-All modules use a built-in structured logger (`src/logger.ts`) with timestamps
-and log levels (`DEBUG` / `INFO` / `WARN` / `ERROR`). Open browser DevTools to
-see detailed lifecycle traces — useful for debugging connection issues and
-understanding the bridge initialization flow.
+- `ws`（默认启用）— WebSocket 支持，禁用后减小依赖体积
+- `--no-default-features` — 只需 WebView 内 IPC 模式时使用
 
 ---
 
-## WS Connection Status Floating Badge
+## 前端完整用法
 
-`bridge-init` auto-shows a draggable connection status badge. Click to expand
-the debug panel with latency, connect/reconnect count, uptime, WS URL, and logs.
+### 零改动模式（推荐）
 
 ```javascript
-import { initFloatingBadge, disableFloatingBadge } from "open-tauri-remote-webview/api/core";
+import "open-tauri-remote-webview/bridge-init";
 
-initFloatingBadge();      // show
-disableFloatingBadge();   // hide
+// @tauri-apps/api 原样使用，无需 if (isTauri()) 分支
 ```
 
-Features:
-- **Status display**: connected / connecting / disconnected / error
-- **Draggable**: move anywhere without blocking page content
-- **Debug panel**: latency, connect count, reconnect count, uptime, WS address, error log
-- **Auto-reconnect**: exponential backoff (1s → 2s → 4s → ... → 30s)
+`bridge-init` 自动检测环境：
+- 原生 WebView → 使用真实 IPC
+- 浏览器 → 安装 WS 桥接 shim
+- 无需轮询、无需 User-Agent 检测
+
+### 显式 API（备选）
+
+```javascript
+import { invoke, setBaseUrl } from "open-tauri-remote-webview/api/core";
+import { listen, once } from "open-tauri-remote-webview/api/event";
+```
+
+### 配置 WS 地址
+
+```javascript
+// 方式 1：完整 URL
+window.__ORUI_WS_URL__ = "ws://192.168.1.100:9090/remote_ui_ws";
+
+// 方式 2：仅端口（自动用当前 hostname）
+window.__ORUI_WS_PORT__ = 9090;
+
+import "open-tauri-remote-webview/bridge-init";
+```
+
+### 关闭悬浮调试窗
+
+```javascript
+// import 前设置
+window.__ORUI_DISABLE_BADGE__ = true;
+import "open-tauri-remote-webview/bridge-init";
+
+// 或运行时关闭
+import { disableFloatingBadge } from "open-tauri-remote-webview/api/core";
+disableFloatingBadge();
+```
+
+### 包导出一览
+
+| 导入路径 | 内容 |
+|---|---|
+| `open-tauri-remote-webview/bridge-init` | 副作用模块，自动安装桥接（推荐） |
+| `open-tauri-remote-webview/api/core` | `invoke`, `setBaseUrl`, WS 状态 API, 悬浮窗控制 |
+| `open-tauri-remote-webview/api/event` | `listen`, `once` |
+| `open-tauri-remote-webview/api/bridge` | `installTauriBridge`（手动安装） |
 
 ---
 
-## Package exports
+## 从原生 Tauri 迁移
 
-| Import path | What it provides |
+### 改动清单
+
+| 环节 | 之前 | 之后 |
 |---|---|---|
-| `open-tauri-remote-webview/bridge-init` | Side-effect — auto-install bridge (recommended) |
-| `open-tauri-remote-webview/api/bridge` | `{ installTauriBridge }` — manual install |
-| `open-tauri-remote-webview/api/core` | `{ invoke, setBaseUrl, getWsStatus, onWsStatusChange, getWsStats, initFloatingBadge, disableFloatingBadge }` |
-| `open-tauri-remote-webview/api/event` | `{ listen, once }` |
-| `open-tauri-remote-webview/floating-badge` | `{ initFloatingBadge, disableFloatingBadge }` — standalone import |
-| `open-tauri-remote-webview` | Re-exports all of the above |
+| Rust 插件 | — | 加 crate + `.plugin(open_tauri_remote_webview::init())` |
+| Rust emit | `use tauri::Emitter` | `use open_tauri_remote_webview::EmitterExt`（调用不变） |
+| Rust 启动 WS | — | setup 里加 `start_remote_ui()` |
+| 前端 | — | 加 `import "open-tauri-remote-webview/bridge-init"` |
+| Vite | — | 加 `/remote_ui_ws` 代理 |
+| isTauri() 分支 | 常见写法 | **删除** — 桥接自动处理 |
+
+### 不需要改的
+
+- 所有 `@tauri-apps/api/*` 导入和用法
+- Rust 端所有 Tauri 命令定义
+- 所有前端构建工具（Vite / Webpack）
+- 所有事件 `listen`/`once`/`emit` 模式
 
 ---
 
-## Plugin Development
+## 功能对照表
+
+| 能力 | WebView (IPC) | 浏览器 (WS) |
+|---|---|---|
+| `invoke`（任意命令） | ✅ | ✅ |
+| 事件 `listen` / `once` | ✅ | ✅ |
+| `@tauri-apps/api/app` | ✅ | ✅ 通过桥接 |
+| `@tauri-apps/api/window` | ✅ | ✅ 通过桥接 |
+| `@tauri-apps/api/event` | ✅ | ✅ 通过桥接 |
+| Rust `emit` → 浏览器 | ✅ | ✅ 通过 `EmitterExt` |
+| IP 访问控制 | ✅ | ✅ |
+| WS 悬浮调试窗 | — | ✅ 自动显示 |
+
+## 已知限制
+
+| 限制 | 说明 | 解决方法 |
+|---|---|---|
+| 单窗口模式 | `getCurrentWindow()` 始终返回 `label: "main"` | 在命令中用明确的窗口标签 |
+| 无资产协议 | `convertFileSrc()` 原样返回路径 | 用原始 URL |
+| invoke 默认需要 WebView | 未注册命令需真实 WebviewWindow 分发 | 用 `#[remote_command]` 注册 |
+| 未认证 WS | WebSocket 端点无认证 | 用防火墙/网络隔离 |
+
+---
+
+## 插件开发
 
 ```bash
-# Build Rust
+# 编译 Rust
 cargo build
 
-# Build JS
+# 编译 JS
 cd guest-js && npm run build
 
-# One shot: build JS → reinstall → launch test app (auto-watches guest-js for changes)
+# 一键：编译 → 安装 → 启动（监听文件变化自动重建）
 cargo xtask dev
 
-# Step by step:
-# 1) Build JS
+# 手动分步
 cd guest-js && npm run build
-# 2) Reinstall the local package in the test app
 cd test/vue-app && pnpm remove open-tauri-remote-webview && pnpm install open-tauri-remote-webview@file:../../guest-js
-# 3) Launch test app (with window + devtools)
 cd test/vue-app && pnpm tauri dev
 
-# Test app (headless, WS only — no window)
+# 无头模式（无窗口）
 cd test/vue-app && npm run rdev
 ```
-
-> `cargo xtask dev` also cleans ports 1420 and 9090 before starting, clears the
-> Vite cache, and watches `guest-js/src/` + `guest-js/api/` for changes —
-> automatically rebuilding JS and hot-reinstalling when files change.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](./LICENSE) for the full text.
+MIT — 详见 [LICENSE](./LICENSE)。
 
-Based on [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0)
-Copyright (c) 2025 **DraviaVemal**, used under MIT.
-
-Modifications and additions Copyright (c) 2026 **ant-cave** (<antmmmmm@126.com> / https://github.com/ant-cave).
+基于 [`tauri-remote-ui` v0.14.0](https://crates.io/crates/tauri-remote-ui/0.14.0) by [DraviaVemal](https://github.com/DraviaVemal)，MIT 协议。
+新增和修改部分 Copyright (c) 2026 **ant-cave** (<antmmmmm@126.com> / https://github.com/ant-cave)。
